@@ -1,0 +1,176 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Type Checking in JavaScript</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Type Checking in JavaScript</h1>
+            <div class="content">
+                <p><em>posted by Beka on 16 Jan 2015</em></p>
+                
+                <p>I'd like to follow up to my previous blog post on implementing a simply typed lambda calculus in JavaScript by demonstrating a more complete, more natural type system. If you haven't read it already, you should do so. The previous type system was a little unnatural because it had no type inference mechanism, and so all of the relevant type information had to be provided in the programs themselves. This time, however, we'll build a type checker that has inference, so we can write more natural programs.</p>
+                
+                <p>To begin, let's define the type theory we'd like to embody. We'll again have just pair types and function types, as well as three primitive types <code>Foo</code>, <code>Bar</code>, and <code>Baz</code> which will serve as place holders until we implement some other types in a later post. Again we'll start with the type formation judgment <code>A type</code> that tells us when something is a type or not:</p>
+                
+                <pre><code>A type
+======
+
+-------- Foo Formation      -------- Bar Formation
+Foo type                    Bar type
+
+
+            -------- Baz Formation
+            Baz type
+
+
+A type    B type                  A type    B type
+---------------- * Formation      ---------------- -> Formation
+    A*B type                        A -> B type</code></pre>
+                
+                <p>The JavaScript implementation will be the same as before:</p>
+                
+                <pre class="code"><code>var Foo = { tag: "Foo" };
+var Bar = { tag: "Bar" };
+var Baz = { tag: "Baz" };
+
+function prod(a,b) {
+    return { tag: "*", left: a, right: b };
+}
+
+function arr(a,b) {
+    return { tag: "->", arg: a, ret: b };
+}
+
+function judgment_type(a) {
+  if ("Foo" == a.tag || "Bar" == a.tag || "Baz" == a.tag) {
+      
+      return true;
+      
+  } else if ("*" == a.tag) {
+      
+      return judgment_type(a.left) &amp;&amp; judgment_type(a.right);
+      
+  } else if ("->" == a.tag) {
+      
+      return judgment_type(a.arg) &amp;&amp; judgment_type(a.ret);
+      
+  } else {
+      
+      return false;
+      
+  }
+}</code></pre>
+                
+                <p>As before, we'll use a snoc linked-list for encoding variable contexts:</p>
+                
+                <pre class="code"><code>var empty = { tag: "&lt;&gt;" }
+
+function snoc(g,x,a) {
+    return { tag: ",:", rest: g, name: x, type: a };
+}
+
+function not_in(n, g) {
+    if ("&lt;&gt;" == g.tag) {
+        
+        return true;
+        
+    } else {
+        
+        if (n == g.name) {
+            
+            return false;
+            
+        } else {
+            
+            return not_in(n, g.rest);
+            
+        }
+        
+    }
+}</code></pre>
+                
+                <p>We'll have new intro and elim rules for the judgment <code>G !- M : A</code> which defines well-typedness. These will define programs that have less annotation for types, and which are therefore more natural and easier to use.</p>
+                
+                <pre><code>G !- M : A
+==========
+
+G !- M : A    G !- N : B
+------------------------ * Intro
+   G !- (M,N) : A*B
+
+G !- P : A*B    G, x : A, y : B !- M : C
+---------------------------------------- * Elim
+     G !- split P as (x,y) in M : C</code></pre>
+                
+                <p>This time, our <code>split</code> elim, which does pattern matching for pairs, is not annotated for the types of <code>x</code> and <code>y</code>. If you look at the stuff above the inference line, you see <code>A</code> and <code>B</code>, but these don't appear below the line. If we wanted to simply type check, we'd need to invent these out of thin air, and there are a lot of ways to do that. So instead we can do inference on <code>P</code>, to get back it's type, which had better be of the form <code>A*B</code>, and proceed from there. So, we'll have the old checking function from before, but also a new inferring function:</code>
+                    
+                <pre><code>function pair(m,n) {
+  return { tag: "(,)", first: m, second: n };
+}
+
+function split(p, x, y, m) {
+    return { tag: "split",
+             pair: p,
+             name_x: x, name_y: y,
+             body: m };
+}
+
+// judgment_check will be modified shortly
+function judgment_check(g, m, a) {
+    
+    if ("(,)" == m.tag &amp;&amp; "*" == a.tag) {
+        
+        return judgment_check(g, m.first, a.left) &amp;&amp;
+               judgment_check(g, m.second, a.right);
+        
+    } else if ("split" == m.tag) {
+        
+        var inferred = judgment_infer(g, m);
+        
+        if ("*" != inferred.tag) { return false; }
+        
+        return judgment_check(snoc(snoc(g, m.name_x, inferred.left),
+                                   m.name_y, inferred.right),
+                              m.body,
+                              a);
+    
+    } else {
+        
+        return false;
+        
+    }
+    
+}
+
+// judgment_infer will also be modified shortly
+function judgment_infer(g, m) {
+    
+    if ("(,)" == m.tag) {
+        var inferred_left = judgment_infer(g, m.first);
+        var inferred_right = judgment_infer(g, m.second);
+        
+        return inferred_left &amp;&amp; inferred_right &amp;&amp;
+               prod(inferred_left, inferred_right);
+    }
+    
+}</code></pre>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).<!-- Here's <a href="https://news.ycombinator.com/item?id=8756903">the HN thread</a> if you prefer that mode, and also <a href="http://www.reddit.com/r/programming/duplicates/2pgq72/implementing_language_engine_pluralities_in/">the Reddit threads</a>.--></p>
+                
+            </div>
+        </section>
+    </body>
+</html>

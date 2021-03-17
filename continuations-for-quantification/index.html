@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Continuations for Quantification</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Continuations for Quantification</h1>
+            <div class="content">
+                <p><em>posted by Beka on 24 Dec 2014</em></p>
+                
+                <p>In this post, I'm going to talk about quantifiers. Not quantifiers as in the type theoretical quantifiers Pi and Sigma, but rather natural language quantifiers like "some", "all", "no", etc. One thing we need to do in implementing Language Engine is have a way of representing the meanings of these, and more specifically, the scope-taking properties that they have.</p>
+                
+                <p>For simple sentences like "John saw Susan", it's easy to pretend like "John" and "Susan" just pick out some entities, perhaps like so:</p>
+                
+                <pre><code>[[John]] : Entity
+[[John]] = john
+
+[[Susan]] : Entity
+[[Susan]] = susan
+
+[[saw]] : Entity -> Entity -> Prop
+[[saw]] = \x. \y. saw(y,x)
+
+[[saw Susan]] : Entity -> Prop
+[[saw Susan]] = \y. saw(y, susan)
+
+[[John saw Susan]] : Prop
+[[John saw Susan]] = saw(john, susan)</code></pre>
+                
+                <p>But this kind of analysis becomes tricky when we start considering sentences like "everyone saw Susan" or "John saw everyone". We might propose that subject quantifiers could be handled like so:</p>
+                
+                <pre><code>[[everyone]] : (Entity -> Prop) -> Prop
+[[everyone]] = \p. forall x : Entity. p x</code></pre>
+                
+                <p>This would be perfectly able to combine with the verb phrase "saw Susan" on the above meaning assignment, to produce the intended meaning:</p>
+                
+                <pre><code>[[everyone saw Susan]] : Prop
+[[everyone saw Susan]] = forall x : Entity. saw(x, susan)</code></pre>
+                
+                <p>But if we want to assign a meaning to object quantifiers in order to get a meaning for "John saw everyone", the assignment for subjects won't do. We need something different:</p>
+                
+                <pre><code>[[everyone]] : (Entity -> Entity -> Prop) -> Entity -> Prop
+[[everyone]] = \p. \x. forall y : Entity. p x y</code></pre>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).<!-- Here's <a href="https://news.ycombinator.com/item?id=8756903">the HN thread</a> if you prefer that mode, and also <a href="http://www.reddit.com/r/programming/duplicates/2pgq72/implementing_language_engine_pluralities_in/">the Reddit threads</a>.--></p>
+                
+            </div>
+        </section>
+    </body>
+</html>

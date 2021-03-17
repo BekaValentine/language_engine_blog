@@ -1,0 +1,27 @@
+<h3>Test Case 1: Symbolic Fuzzy Matching</h3>
+                
+                <p>In this test case, we'll look at how well the symbolic vector representation works as a means of performing a fuzzy match on between pieces of symbolic data. We'll use Hoogle as a starting point.</p>
+                
+                <p><a href="https://www.haskell.org/hoogle/">Hoogle</a> is a search engine for the Haskell package repository Hackage, which permits searching by type. For example, the user can search for the type <span class="code">(a -&gt; b) -&gt; [a] -&gt; [b]</span> and Hoogle will find the <span class="code">map</span> function, which has precisely that type, as well as other functions such as <span class="code">fmap</span> which has the similar type <span class="code">Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b</span>, and the function <span class="code">(&lt;*&gt;)</span> which has the type <span class="code">Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b</span>. These are all pretty similar types, having much in common. Hoogle performs a kind of fuzzy matching on these types already, as can be seen, so it would be interesting to compare the symbolic vector technique to Hoogle's own performance.</p>
+                
+                <p>The first thing we'll do is establish the right set of labels for this task. As a first pass, we can try a simple label set consisting of syntactic constructs as node labels and the node labels affixed with argument number as edge labels. This would be the basic technique outlined above. For the names of type constructors, we'll assume that there's a finite number, namely those in our database, rather than having an open-ended set.</p>
+                
+                <p>...</p>
+                
+                <p>One extension of this approach would be to add an additional edge label that represent arguments generically. That is to say, rather than just having edges that indicate particular arguments of particular constructions (e.g. the first argument of a function type node), we'll also have an edge that represents argumenthood independent of which number argument and which type of node.</p>
+                
+                <p>...</p>
+                
+                <p>We'll further modify this system by adding the reflexive transitive closure of the argumenthood label (i.e. representing 0-or-more length paths alone argument edges). This represents a containment relation, and makes it possible to view types such as <span class="code">a</span>, <span class="code">f a</span>, and <span class="code">f (g a)</span> as similar (in that they all involve <span class="code">a</span> in some way).</p>
+                
+                <p>...</p>
+                
+                <h3>Test Case 2: Program Refactoring</h3>
+                
+                <p>In this test case, we'll look at how well the symbolic vector representation works as a means of detecting common program patterns for use as a basis for refactoring. The language we'll use to experiment with this is a version of the Simply Typed Lambda Calculus. To begin with, we'll try this technique on a handful of hand-crafted examples, to see if the technique looks viable at all, and then we'll try it on the full Hoogle database of programs to see what proposed refactorings it can identify.</p>
+                
+                <p>...</p>
+                
+                <h3>Test Case 3: Syntax-based Word Analogies</h3>
+                
+                <p>...</p>

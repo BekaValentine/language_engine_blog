@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Unger Parsing</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Unger Parsing</h1>
+            <div class="content">
+                <p><em>posted by Beka on 6 Mar 2015</em></p>
+                
+                <p>In this third post in my series on parsing inputs that might have errors (previous post <a href="https://languagengine.co/blog/parsing-ltsgs">here</a>), I'm going to talk about Unger parsing. Unger parsing is a simple parsing technique that can handle ambiguous grammars quite nicely, and turns out to also be rather well suited to handling errors as well. I'll introduce Unger parsing, since I suspect most people are unfamiliar with it, then discuss it's application to error handling, and then discuss its drawbacks.</p>
+                
+                <h2>What is Unger Parsing?</h2>
+                
+                <p>Suppose we have a simple context free grammar for mathematical expressions such as the following:</p>
+                
+                <pre><code>exp → var
+exp → exp op exp
+var → x
+var → y
+var → z
+op → +
+op → -</code></pre>
+                
+                <p>As you might expect, this generates sentences such as <code>x + y</code>, and <code>z - z + z</code>, and so forth. The idea behind Unger parsing is to take the input string — let's use <code>x + y</code> — and try each possible rule for the given target symbol by splitting the string into however many parts as there are symbols in the right hand side of the rule, and then recursing. So for example, if we try to parse <code>x + y</code> as an <code>exp</code>, we might try the first rule, <code>exp → var</code> which says we need to parse <code>x + y</code> as a single substring labeled <code>var</code>. Then we would try a rule for <code>var</code>, such as the rule <code>var → x</code>, and again we parse <code>x + y</code> as a single string, containing the symbol <code>x</code>, which fails.</p>
+                
+                <p>We might have instead chosen to parse with the second rule for <code>exp</code>, which says to parse <code>x + y</code> as three strings labeled <code>exp</code>, <code>op</code>, and <code>exp</code>, in that order. We can split <code>x + y</code> into three strings in various ways due to the empty string, but one of them, which splits it as <code>x</code>, <code>+</code>, and <code>y</code> will succeed. Variants of this algorithm disallow splitting into the empty string, but we want to include it.</p>
+                
+                <p>This process is possibly better visualized using some tables, so here's the first, failed parse tabularly. We start with our goal parse, spanning the whole input, like so:</p>
+                
+                <table>
+                    <tr><td><code>exp</code></td></tr>
+                    <tr><td><code>x+y</code></td></tr>
+                </table>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).<!-- Here's <a href="https://news.ycombinator.com/item?id=8756903">the HN thread</a> if you prefer that mode, and also <a href="http://www.reddit.com/r/programming/duplicates/2pgq72/implementing_language_engine_pluralities_in/">the Reddit threads</a>.--></p>
+                
+            </div>
+        </section>
+    </body>
+</html>

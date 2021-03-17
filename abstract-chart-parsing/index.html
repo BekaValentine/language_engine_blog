@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Abstract Chart Parsing</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Abstract Chart Parsing</h1>
+            <div class="content">
+                <p><em>posted by Beka on 17 July 2015</em></p>
+                
+                <p>About a year ago I posted <a href="https://github.com/psygnisfive/Haskell-Chart-Parser">a tutorial on Github</a> about the chart parser I'm using for Language Engine's linguistic parsing. In the intervening year, I've rethought parts of it, and come up with a new, more general, abstract approach to chart parsing that I'm going to call <emph>Abstract Chart Parsing</emph>, because it abstracts over the details of the chart and the rules in very useful ways. An alternative name, owing to its design, might be State Machine Chart Parsing.</p>
+                
+                <p>To start, I want to discuss one major drawback to the approach in that tutorial. If we look at the definition of the <code>Rule</code> type, it goes as follows:</p>
+                
+                <pre><code>data Rule a = Rule { arity :: Int, matcher :: [ChartItem a] -> Maybe (ChartItem a) }</code></pre>
+                
+                <p>This rule structure codes up rules of the form <code>X → Y Z ...</code> where the arity is the number of symbols on the right hand side, and the matcher function is a test that either fails, or if it succeeds, returns the new node (i.e. the left hand side).</p>
+                
+                <p>This kind of approach has the benefit of going beyond just bare symbols, so that the information in the nodes can be rich, and might even involve unification, etc. but it has a major drawback owing to the use of an arity, which is that there's no way for this kind of rule to short circuit its application. That is to say, the implementation will always pull of <code>arity</code> many sequential edges in the chart before giving them to the rule.</p>
+                
+                <p>If the rule fails because the very first edge fails, well, you won't find out until all the edges have been read into the rule's matcher function. If the chart has a lot of edges, this could mean a combinatorial explosion, only to fail on all of them. It'd be good to be able to feed edges to the rule one at a time and let it decide if and how to continue.</p>
+                
+                <p>In addition to this implementation error, I had been operating with a conceptual limitation. It might not have come across in the tutorial or the code, tho I expect most people who read it will also arrive at the same construal. That limitation was: I was viewing the chart type as really and truly representing the chart. Now, in some sense this is exactly what it does — the chart in a chart parser can indeed be seen as a directed acyclic graph and the type <code>Chart</code> is exactly the type you'd normally use to represent DAGs in Haskell.</p>
+                
+                <p>However, this is actually not the most general view of what <code>Chart</code> is doing as a type. The reason is that normally, charts in chart parsing are linearly structured objects — there's a left-right orientation to them because parsing has linear left-right structure. But it turns out that there are applications where you actually want a set, not a list, such as <a href="http://lingo.stanford.edu/courses/04/pg/ftp/Kay:96.pdf">this paper by Martin Kay called Chart Generation</a>. In this paper, Kay uses a chart parser with a set chart to parse from <emph>semantic representations</emph> into syntax trees that can be flattened into source text.</p>
+                
+                <p>So what does this have to do with the <code>Chart</code> type I used? Well, it turns out that there's no actual reason to view it as representing linear structure at all. All it represents is <emph>linear (non-deterministic) access to data</emph>, that is, accessing elements in sequence. This doesn't mean the elements <emph>themselves</emph> are ordered, just that your access to them is. And this changes the perspective entirely, because an efficient implementation of Kay's idea essentially relies on controlling access to elements of the set-structured chart in a particular way.</p>
+                
+                <p>So the new view of chart parsing is as a pair of an emitter state machine, which emits symbols according to some internal logic that you don't see (corresponding to the chart), and a consumer state machine which consumes symbols and possibly yields a symbol (corresponding to the rules of the grammar). Parsing involves plugging emitters into consumers and letting them run until they all halt, either through failure to emit, failure to consume, or finish consuming.</p>
+                
+                <p>The DAG structure of the <code>Chart</code> type corresponds precisely to the state transitions and symbol emission of a non-deterministic automaton, and we can take advantage of Haskell's laziness to allow us to build up the structure of such a state machine incrementally, and only as needed.</p>
+                
+                <p>So let's look at the Haskell code. It's not too long — 23 significant lines of code, if you ignore empty lines for readability, which is a nice little digestible unit. First up, emitters:</p>
+                
+                <pre><code>newtype Emitter a = Emitter [(a, Emitter a)]</code></pre>
+                
+                <p>An <code>Emitter a</code> is just some list of <code>a</code>s paired with emitters that come after them. So an emitter is a node in a state machine, viewed as the sum total of its outward edges and all their future behavior.</p>
+                
+                <p>For convenience, it's useful to be able to take a list of emitters and fuse them together into one emitter that behaves like the disjunction of them. That is to say, we take some set of nodes and make a new node that non-deterministically acts like all of the nodes.</p>
+                
+                <pre><code>combineEmitters :: [Emitter a] -> Emitter a
+combineEmitters []                = Emitter []
+combineEmitters (Emitter xs : es) = let Emitter ys = combineEmitters es
+                                    in Emitter (xs ++ ys)</code></pre>
+                
+                <p>We also will want to have a way of asking an emitter for all of its outward edges that halt immediately after transitioning. In a linear chart, like for natural language and programming language syntax, these edges span the whole of the input and constitute successful parses.</p>
+                
+                <pre><code>spans :: Emitter a -> [a]
+spans (Emitter xs) = [ x | (x, Emitter []) <- xs ]</code></pre>
+                
+                <p>Now we move on to consumers. A <code>Consumer a</code> is a state machine that reads in characters one at a time, and can stop by either failing (when a symbol, or sequence of symbols, is not accepted by the machine) or succeeding, whereupon it emits a single symbol.</p>
+                
+                <pre><code>data Consumer a = Fail | Succeed a | Consume (a -> Consumer a)</code></pre>
+                
+                <p>The failure case allows rules-as-consumers to fail as soon as enough input has been read, thus addressing the earlier concern about combinatorial explosions for no good reason. The success case is the returned symbol that will eventually get put back onto the chart.</p>
+                
+                <p>Next, we can plug an emitter and a consumer together and running them until either the consumer stops, or the emitter stops. This process is non-deterministic, because the emitter is non-deterministic, and so yields any number of symbols, together with the remainder of the emitter yet to be consumed.</p>
+                
+                <pre><code>step :: Emitter a -> Consumer a -> [(a, Emitter a)]
+step e            (Succeed x) = return (x,e)
+step e            Fail        = []
+step (Emitter xs) (Consume f) = do (x,e) <- xs
+                                   step e (f x)</code></pre>
+                
+                <p>At this point, we have a way of taking a chart-as-emitter, and running a rule-as-consume on it, to see if the rule applies, and if so, to get back the symbol to label a new chart edge with. Our next step is to plug a whole collection of consumers into a single chart, which is to say, to take a whole grammar and apply it once to see if anything in the chart <emph>as it is at the moment</emph> can be used to build new nodes in a parse tree.</p>
+                
+                <pre><code>next :: [Consumer a] -> Emitter a -> [Emitter a]
+next cs e = [ Emitter [(x,e')] | (x,e') <- concat (map (step e) cs) ]</code></pre>
+                
+                <p>If we stack this process on itself, so that the new edges of one moment become the inputs of the next, until no more new edges are added, we can saturate any given chart, so that all possible new edges are added.</p>
+                
+                <pre><code>saturate :: [Consumer a] -> Emitter a -> Emitter a
+saturate cs e = combineEmitters (e : map (saturate cs) (next cs e))</code></pre>
+                
+                <p>At this point, everything that could be added to the chart has been. We now have a new chart that has as full of edges as it will ever be.</p>
+                
+                <p>Next, we need to be able to extend the chart. Any given chart represents only some initial portion of the input to be parsed (possibly a complete input, i.e. the maximal initial portion, but also anything shorter), so we need to be able to read in more of the input incrementally. We do that for a single symbol by making a new chart that emits only that symbol, and then transitions to the given chart. Of course, we want the new chart to have all the possible new edges we can add, so we saturate.</p>
+                
+                <pre><code>addSymbol :: [Consumer a] -> Emitter a -> a -> Emitter a
+addSymbol cs e x = saturate cs (Emitter [(x,e)])</code></pre>
+                
+                <p>We can add multiple symbols one at a time just by taking a list of symbols and folding over it.</p>
+                
+                <pre><code>addSymbols :: [Consumer a] -> Emitter a -> [a] -> Emitter a
+addSymbols cs = foldl (addSymbol cs)</code></pre>
+                
+                <p>And finally, recognition happens just by adding all our input symbols to the empty chart, and asking for the spanning edges of the resulting chart.</p>
+                
+                <pre><code>recognize :: [Consumer a] -> [a] -> [a]
+recognize cs xs = spans (addSymbols cs (Emitter []) xs)</code></pre>
+                
+                <p>A number of convenient tools can be made for dealing with simple context free grammars and with parse trees. As it stands, it looks like this is just a recognizer/acceptor — either it succeeds with some symbols that span the chart or it fails with none, it doesn't build a parse tree — but because it's polymorphic over the type of the symbols, we can actually label the edges of the chart with parse trees, and use our consumers/rules to build them appropriately. So we have dual purpose code.</p>
+                
+                <p>Actually it's multi-purpose, because the new tree can be arbitrarily transformed from the inputs, and really the symbols can be anything at all, including computed values (so that this could be used to evaluate an expression as it parses).</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).</p>
+                
+            </div>
+        </section>
+    </body>
+</html>

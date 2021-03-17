@@ -1,0 +1,232 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Bidirectional Proof Refinement</title>
+        
+        <script src="/resources/prooftree/svg.js"></script>
+        <script src="/resources/prooftree/prooftree.js"></script>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Telescopic<br/>Proof Refinement</h1>
+            <div class="content">
+                <p><em>posted by Beka on 28 December 2017</em></p>
+                
+                <p>In the third post in this series on proof refinement, I'm going to show you how to properly handle bidirectionality in an elegant way. The technique we'll use is the replacement of lists and functions with a data structure called a telescope. This post will use Haskell exclusively, because of the limitations of JavaScript in presenting these things elegantly.</p>
+                
+                <p>I've put together <a href="https://www.repl.it">repl.it</a> REPLs for this blog post so you can play around with the code. You can find them here: <a href="https://repl.it/@psygnisfive/TelescopicProofRefinement-Addition1">Addition 1</a>, <a href="https://repl.it/@psygnisfive/TelescopicProofRefinement-Addition2">Addition 2</a>, <a href="https://repl.it/@psygnisfive/TelescopicProofRefinement-Addition3">Addition 3</a>, <a href="https://repl.it/@psygnisfive/ProofRefinement-LambdaCalculus">Lambda Calculus</a>.</p>
+                
+                <p>Consider the type that represented a successful decomposition of a problem judgment into subproblems, when working in the proof system for addition: <span class="code">([Judgment], [Nat] -> Nat)</span>. The list of judgments represents the subproblems, and the function represents how to compute the result of the main problem from the results of the subproblems. This was problematic to generalize though, because it meant that all of the subproblems had to be independent. You couldn't use the result of solving an earlier subproblem to state what a later problem was. Information flowed strictly from subproblems out to main problems, never into other subproblems.</p>
+                
+                <p>This of course was because the subproblems were all given at the same time, and the results were all simultaneous arguments to the function that computed the main result. For instance, we might have a decomposition that looked like <span class="code">([j0,j1,j2], f)</span> where <span class="code">f = \[r0,r1,r2] -> ...</span>, and we would solve these basically as <span class="code">f [solve j0, solve j1, solve j2]</span>. What could we do to make it possible to have dependence of later problems are earlier results, though? Well, we could produce subproblems and consume results one at a time, in fact! instead of the above pair, why not have <span class="code">(j0, \r0 -> (j1, \r1 -> (r2, \r2 -> ...)))</span>. This has the type <span class="code">(Judgment, Nat -> (Judgment, Nat -> (Judgment, Nat -> Nat)))</span>, which is specific to the case where the list of subproblems has exactly three subproblems in it. This doesn't generalize well, but we can notice the obvious recursive pattern and instead define</p>
+                
+                <pre><code>data Problems = Done Nat
+              | SubProblem Judgment (Nat -> Problems)</code></pre>
+              
+                <p>Here, we're either done, and we have a resulting number, or we have a subproblem to solve, and a way of getting from the result of solving it to some more problems. Now of course, decomposing actually produced a <span class="code">Maybe ([Judgment], [Nat] -> Nat)</span>, so we really ought to define this type to account for the <span class="code">Nothing</span> case as well:</p>
+                
+                <pre><code>data Problems = Fail
+              | Done Nat
+              | SubProblem Judgment (Nat -> Problems)</code></pre>
+                
+                <p>Our decompositions now will look mostly the same, but slightly different:</p>
+                
+                <pre><code>decomposePlus12 :: Nat -> Nat -> Problems
+decomposePlus12 Zero    y = Done y
+decomposePlus12 (Suc x) y = SubProblem (Plus12 x y) (\z -> Done (Suc z))
+
+decomposePlus13 :: Nat -> Nat -> Problems
+decomposePlus13 Zero z = Done z
+decomposePlus13 (Suc x) (Suc z) = SubProblem (Plus13 x z) (\z -> Done z)
+decomposePlus13 _ _ = Fail
+
+decompose :: Judgment -> Problems
+decompose (Plus12 x y) = decomposePlus12 x y
+decompose (Plus13 x z) = decomposePlus13 x z</code></pre>
+                
+                <p>Finding a proof is pretty easy now too, because we can just define it in in terms of a second function that handles problems more generally. Dropping the reconstruction of a proof tree, we have</p>
+                
+                <pre><code>findProof :: Judgment -> Maybe Nat
+findProof j = solveProblems (decompose j)
+
+solveProblems :: Problems -> Maybe Nat
+solveProblems Fail = Nothing
+solveProblems (Done x) = return x
+solveProblems (SubProblem j f) =
+  do x &lt;- findProof j
+     solveProblems (f x)</code></pre>
+                
+                <p>The interesting thing here is how we solve problems. If we fail, well, we've failed, so there's nothing to return. If we've finished, we've finished and so there's a number to return. But what if we have a subproblem? Well, we simply find a proof for it, computing the result as <span class="code">x</span>, and then use the result of that to get more problems to solve, and solve those.</p>
+                
+                
+                
+                <h3>Generalizing</h3>
+                
+                <p>Having established the general shape of this approach, we can now move on to generalizing the pattern involved. The first move we'll make is to observe that we might want to generalize the type of judgments to index for the type of their result. After all, we might also want to include predicates in the class of possible judgments, where there are no useful return values at all, just <span class="code">()</span>. So we can generalize <span class="code">Judgment</span>, and in term, <span class="code">Problems</span>, like so:</p>
+                
+                <pre><code>data Judgment r where
+  Plus12 :: Nat -> Nat -> Judgment Nat
+  Plus13 :: Nat -> Nat -> Judgment Nat
+
+data Problems r where
+  Fail :: Problems r
+  Done :: r -> Problems r
+  SubProblem :: Judgment s -> (s -> Problems r) -> Problems r</code></pre>
+                
+                <p>As soon as we do this, we discover that <span class="code">Problems</span> looks an awful lot like a monad, and indeed, it is!</p>
+                
+                <pre><code>instance Functor Problems where
+  fmap f Fail = Fail
+  fmap f (Done x) = Done (f x)
+  fmap f (SubProblem p g) = SubProblem p (fmap f . g)
+
+instance Applicative Problems where
+  pure = Done
+  pf <*> px = pf >>= \f -> px >>= \x -> return (f x)
+
+instance Monad Problems where
+  return = Done
+  Fail >>= g = Fail
+  Done x >>= g = g x
+  SubProblem p f >>= g = SubProblem p (\x -> f x >>= g)</code></pre>
+                
+                <p>This monad instance basically just codes up concatenation of problems. With lists of judgments, we can just concatenate them, but what to do with the functions that construct results? Here instead we say that if we have one sequence of problems that produces some result, and from that result, we can compute another sequence of problems, well we can just dig around in the first sequence and replace its <span class="code">Done</span> node (which ends the sequence of problems with the result) by the problems we would get. We thus get a single big sequence of problems.</p>
+                
+                <p>This monadic interfaces also gives us a really elegant way of writing these telescopes:</p>
+                
+                <pre><code>subProblem :: Judgment r -> Problems r
+subProblem j = SubProblem j (\x -> Done x)
+
+decomposePlus12 :: Nat -> Nat -> Problems Nat
+decomposePlus12 Zero    y = return y
+decomposePlus12 (Suc x) y =
+  do z &lt;- subProblem (Plus12 x y) 
+     return (Suc z)
+
+decomposePlus13 :: Nat -> Nat -> Problems Nat
+decomposePlus13 Zero z = return z
+decomposePlus13 (Suc x) (Suc z) =
+  subProblem (Plus13 x z)
+decomposePlus13 _ _ = Fail</code></pre>
+                
+                <p>Let's add in a full ternary predicate version of our <span class="code">Plus</span> to see how this works with other kinds of returned values:</p>
+                
+                <pre><code>data Judgment r where
+  Plus12 :: Nat -> Nat -> Judgment Nat
+  Plus13 :: Nat -> Nat -> Judgment Nat
+  Plus123 :: Nat -> Nat -> Nat -> Judgment ()
+
+decomposePlus123 :: Nat -> Nat -> Nat -> Problems ()
+decomposePlus123 Zero y z =
+  if y == z
+     then return ()
+     else Fail
+decomposePlus123 (Suc x) y (Suc z) =
+  subProblem (Plus123 x y z)
+</code></pre>
+                
+                <p>Readers who are especially familiar with functional programming idioms will observe that this is a variety of free monad construct, namely, the call-response tree variety.</p>
+                
+                <p>And now, what parts of this really depend on the problem domain of addition? Well, clearly <span class="code">Judgment</span>, because that defines what the problems are in the first place. And of course, as a result of that, the various decomposition functions. But not much else, provided we have some means of abstracting over those. Namely: the <span class="code">Problems</span> type can be generalized away from <span class="code">Judgment</span>, and <span class="code">fineProof</span> can be generalized away from the implementation of <span class="code">decompose</span>. Another move we'll make is to '</p>
+                
+                <pre><code>data Problems j r where
+  Fail :: Problems j r
+  Done :: r -> Problems j r
+  SubProblem :: j s -> (s -> Problems j r) -> Problems j r
+
+subProblem :: j r -> Problems j r
+subProblem j = SubProblem j (\x -> Done x)
+
+class Decomposable j where
+  decompose :: j r -> Problems j r
+
+findProof :: Decomposable j => j r -> Maybe r
+findProof j = solveProblems (decompose j)
+
+solveProblems :: Decomposable j => Problems j r -> Maybe r
+solveProblems Fail = Nothing
+solveProblems (Done x) = Just x
+solveProblems (SubProblem j f) =
+  do x &lt;- findProof j
+     solveProblems (f x)</code></pre>
+                
+                <p>Having abstracted this far, we now can extract this into a little library and use this for bidirectional proof systems in general. Let's now tackle the simply typed lambda calculus.</p>
+                
+                <h3>Simply Typed LC</h3>
+                
+                <p>Because we've extracted out the proof refinement toolkit, we need to only give definitions for the judgments and decomposition of our lambda calculus. This is a great simplification from the setting before. We can now express that type checking is a judgment that produces no interesting information, but that type synthesis will give us some type information:</p>
+                
+                <pre><code>data Judgment r where
+  Check :: [(String,Type)] -> Program -> Type -> Judgment ()
+  Synth :: [(String,Type)] -> Program -> Judgment Type</code></pre>
+                
+                <p>Our decompositions are now more interesting as well, and hopefully a bit more insightful:</p>
+                
+                <pre><code>decomposeCheck :: [(String,Type)] -> Program -> Type -> Problems Judgment ()
+decomposeCheck g (Pair m n) (Prod a b) =
+  do subProblem (Check g m a)
+     subProblem (Check g n b)
+decomposeCheck g (Lam x m) (Arr a b) =
+  subProblem (Check ((x,a):g) m b)
+decomposeCheck g m a =
+  do a2 &lt;- subProblem (Synth g m)
+     if a == a2
+        then return ()
+        else Fail
+
+
+decomposeSynth :: [(String,Type)] -> Program -> Problems Judgment Type
+decomposeSynth g (Var x) =
+  case lookup x g of
+    Nothing -> Fail
+    Just a -> return a
+decomposeSynth g (Ann m a) =
+  do subProblem (Check g m a)
+     return a
+decomposeSynth g (Fst p) =
+  do t &lt;- subProblem (Synth g p)
+     case t of
+       Prod a b -> return a
+       _ -> Fail
+decomposeSynth g (Snd p) =
+  do t &lt;- subProblem (Synth g p)
+     case t of
+       Prod a b -> return b
+       _ -> Fail
+decomposeSynth g (App f x) =
+  do t &lt;- subProblem (Synth g f)
+     case t of
+       Arr a b ->
+         do subProblem (Check g x a)
+            return b
+       _ -> Fail
+decomposeSynth g m = Fail
+
+
+instance Decomposable Judgment where
+  decompose (Check g m a) = decomposeCheck g m a
+  decompose (Synth g m) = decomposeSynth g m</code></pre>
+                
+                <p>And we're done! That is the <em>full</em> definition of the type checker for the simply typed lambda calculus with pairs and functions! It has the benefit of being fairly straightforward to read.</p>
+                
+                <h3>Conclusion</h3>
+                
+                <p>This wraps up the series of blog posts on proof refinement. One limitation to this approach is that errors are uninformative, but we can actually modify this toolkit to provide not just informative errors (<span class="code">Either</span> instead of <span class="code">Maybe</span>), but highly informative context-aware errors that know what subproblems are being worked on. Another limitation is that the above toolkit only works for when there is at most one result from the bottom-up direction. That is to say, either a judgment has no proofs, and so there's no bottom-up result, or it has exactly one proof and thus one bottom-up result. But we might have multiple such results, for instance, we might have instead built a system for addition that has the first two arguments of <span class="code">Plus</span> as the bottom-up results (i.e. solutions for <span class="code">Plus3 c</span>), and we'd like to be able to get out all pairs <span class="code">(x,y)</span> such that <span class="code">x + y = c</span> for fixed <span class="code">c</span>. There are plenty of those pairs, so we had better be able to get some kind of list-like results. We also might imagine some other kind of system where in the course of constructing a proof we need to invent something out of thin air, such as a new name for a variable. In that kind of setting we'd like to have a proof system that could make use of some state for the collection of generated names. I'll look at both of these limitations in future blogposts.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).</p>
+            </div>
+        </section>
+    </body>
+</html>

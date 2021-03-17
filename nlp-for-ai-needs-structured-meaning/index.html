@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - NLP for AI Needs Structured Meaning</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>NLP for AI Needs Structured Meaning</h1>
+            <div class="content">
+                <p><em>posted by Beka on 14 Jan 2015</em></p>
+                
+                <p>In <a href="/blog/what-happened-to-old-school-nlp">my previous blog post</a>, I mentioned that new school NLP techniques for handling meaning can't really cope with the complexities of actual meaning in language, and typically are pretty primitive as a result. In this blog post, I'm going to discuss a number of aspects of natural language semantics which pose a problem for primitive, unstructured approaches, all of which are relevant for bigger AI projects. Hopefully you'll get a sense of why I think more structure is better, or at least you'll have an idea of what to try to solve with new school techniques.</p>
+                
+                <p>There are five major phenomena related to natural language meanings which I'm going to focus on:</p>
+                
+                <p>- Linear Order<br/>
+                   - Grouping</br/>
+                   - Non-uniform Composition
+                   - Inference Patterns
+                   - Invisible Meanings</p>
+                
+                <p>Don't worry if you don't know what these are, they're just presented here so you know the route we're going to take in this post.</p>
+                
+                <h3>Linear Order</h3>
+                
+                <p>Linear order matters. Not just to grammaticality, making "John saw Susan" grammatical in English but not "saw John Susan", but also to meaning. Treating a sentence as a bag of words doesn't suffice to capture meaning, because then the sentences "John saw Susan" and "Susan saw John" are the same. They have the exact same bag of words representation, so the exact same meaning. But of course they have very different meanings.</p>
+                
+                <p>Even simple order information isn't quite enough. Even tho "John" and "Susan" are in the same order in the sentences "John saw Susan" and "John was seen by Susan", they mean different things because of the verbal morphology. Topicalization in English makes things even worse, because it has no morphological effects, so "<em>JOHN</em> Susan saw" doesn't mean the same thing as "John saw Susan". (If you don't quite like this sentence, try "Susan I don't know, but John I know".)</p>
+                
+                <p>If we have order together with some kind of constructional analysis (active vs. passive, topicalized vs. not) we'd be able to sort out some of this, perhaps mapping to a single meaning for all of these. This would constitute a richer class of semantic representations, and a considerably richer mapping from the syntactic form to the semantic form.</p>
+                
+                <h3>Grouping</h3>
+                
+                <p>Not only does linear order matter, but there are also grouping or association effects. That is to say, the meanings that correspond to different parts of a sentence "go together" in ways that seem to depend on how the parts of the sentence themselves go together. Multi-clause sentences are a perfect example of this.</p>
+                
+                <p>Consider the sentence "John saw Susan before Michael met Stephen". As a bag of words we're going to miss out on a lot of what's going on here, but even if we have some consideration of word order as described above, we probably don't want to view this sentence as one big whole. That is to say, we probably don't want to look at this as having four noun phrases — John, Susan, Michael, and Stephen — in some construction.</p>
+                    
+                <p>It'd be better to view it as two clauses, "John saw Susan" and "Michael met Stephen" combined with the word "before", so that John and Susan "go with" the seeing, and Michael and Stephen "go with" the meeting, not vice versa. The fact that we can reverse the clauses and change only the temporal order, not the goings-with — "Michael met Stephen before John saw Susan" — emphasizes this.</p>
+                
+                <p>Another example of how things associate in non-trivial ways is ambiguity. Consider "the man read the book on the table". We can say this to describe two situations, one where we're talking about a man sitting on table while reading a book, and another where the man is sitting in a chair reading a book, which happens to be currently (at the time of speech) on the table. The second interpretation is especially drawn out in this conversation:</p>
+                
+                <pre><code>Q: Which book did he read?
+A: The one on the table.</code></pre>
+                
+                <p>There is also no way to get a third interpretation where the guy who read to book is currently sitting on the table, even tho he read it while sitting in a chair. So this conversation does <em>NOT</em> cohere with that sentence:</p>
+                
+                <pre><code>Q: Who read the book?
+A: The guy on the table.</code></pre>
+                
+                <p>Any solution we give to this problem, so that these meanings are all distinguished, will require more structure than just a bag of words or even linear order.</p>
+                
+                <h3>Non-uniform Composition</h3>
+                
+                <p>Another aspect of meaning which requires structure is the way meanings compose to form larger meanings. Some meanings can go together to form larger meanings, while others can't. For instance, while both dogs and ideas can be interesting, only dogs can be brown. A brown idea is kind of nonsense (or at the least, we don't know how to judge when an idea is brown).</p>
+                
+                <p>Even when meanings can compose, they sometimes compose differently. So while a brown dog and a brown elephant are brown in more or less the same way — it's kind of conjunctive or intersective, in that a brown dog is both brown and a dog. On the other hand, a small dog and a small elephant are small in different ways. A small dog is on the whole pretty minute, but a small elephant isn't small, it's still about as big as some cars! When the meanings of words like "small" (called subsective adjectives) combine with noun meanings, they produce a meaning that is relative to the noun meaning — small <em>for an elephant</em>, not just small <em>and</em> an elephant.</p>
+                
+                
+                <h3>Inference Patterns</h3>
+                
+                <p>Inferences are another place where structure reveals itself. One thing we do with meanings is reason about them, and figure out what other things are true in virtue of others being true. For example, if someone says to me, "John is tall and Susan is short", then I can go tell someone else, "John is tall". That is to say, the sorts of meanings we have support inferences of the form</p>
+                
+                <pre><code>if I know
+  A and B
+then I know
+  A</code></pre>
+                
+                <p>Other things, such as adjectives, have similar inferences, so if I know "John ate a Margherita pizza", then I know "John ate a pizza", because after all, a Margherita pizza is just a kind of pizza. If I negate the sentence, however, this inference is not valid: if I know "John didn't eat a Margherita pizza", that does not mean I know "John didn't eat a pizza". After all, he might have eaten a Hawaiian pizza instead. However, if I swap the sentences, it's valid: if I know "John didn't eat a pizza", then I know "John didn't eat a Margherita pizza".</p>
+                
+                <p>These entailment patterns aren't just found with the word "not", but with all sorts of other words. Quantifiers, such as "every", "few", and "no", all impose entailment patterns, and sometimes not the same ones in all places. Consider the following examples, where <code>!-</code> means "entails", and <code>!/-</code> means "does not entail":</p>
+                
+                <pre><code>every dog barked !- every brown dog barked
+every brown dog barked !/- every dog barked
+
+every dog barked !/- every dog barked loudly
+every dog barked loudly !- every dog barked
+
+few dogs barked !/- few brown dogs barked
+few brown dogs barked !/- few dogs barked
+
+few dogs barked !- few dogs barked loudly
+few dogs barked loudly !/- few dogs barked
+
+no dogs barked !- no brown dogs barked
+no brown dogs barked !/- no dogs barked
+
+no dogs barked !- no dogs barked loudly
+no dogs barked loudly !/- no dogs barked</code></pre>
+
+                <p>The basic pattern for these sentences is "Q dog(s) barked", either with or without "brown" and "loudly". But these words have completely different patterns of entailment! Here's a table summarizing the patterns and the data:</p>
+                
+                <pre><code>A = Q dog(s) barked
+B = Q brown dog(s) barked
+C = Q dog(s) barked loudly
+
+Q \ Direction |  A !- B  |  B !- A  |  A !- C  |  C !- A
+---------------------------------------------------------
+every         |    Y     |    N     |    N     |    Y
+few           |    N     |    N     |    Y     |    N
+no            |    Y     |    N     |    Y     |    N</code></pre>
+
+                <h3>Invisible Meanings</h3>
+                
+                <p>Lastly, some words or constructions seem to have more meaning than is obvious from just the obvious parts of the sentence. Consider the verb "copy". It has a subject, the copier, and an object, the original being copied. There's no way to express the duplicate object being created, however. You can't say "John copied the paper the page" to mean he copied the paper and out from the copying machine came the copied page, or something. There's just no way to use that verb and have a noun phrase in there that represents the duplicate.</p>
+                
+                <p>But the duplicate is still crucially part of the meaning, and in fact can be referred to later on. In the absence of a previously mentioned duplicate, it's weird to say "he put the duplicate in his book". Which duplicate? You didn't mention any duplicate. But if you first say "he copied the paper", then you know exactly which duplicate, even tho there's no phrase in that sentence that mentions it explicitly. It's implicit to the verb meaning, but still accessible.</p>
+                
+                <h3>Wrap Up</h3>
+                
+                <p>Building an AI requires grasping meaning, and hopefully this post has helped to lay out some of the reasons why structure is necessary for meaning and therefore for NLP for AI. There are solutions to all of these that are pretty straight forward, but which are vastly richer in structure than the kind of things you find in a new school NLP approach. I think new school algorithms can be combined with these richer structures, tho, so the future looks bright. If you think there might be a pure new school solution that doesn't require richer structure, let me know! I'd be interested in alternatives.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).<!-- Here's <a href="https://news.ycombinator.com/item?id=8756903">the HN thread</a> if you prefer that mode, and also <a href="http://www.reddit.com/r/programming/duplicates/2pgq72/implementing_language_engine_pluralities_in/">the Reddit threads</a>.--></p>
+                
+            </div>
+        </section>
+    </body>
+</html>

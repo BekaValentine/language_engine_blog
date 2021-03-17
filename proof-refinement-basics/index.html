@@ -1,0 +1,109 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Proof Refinement Basics</title>
+        
+        <script src="/resources/prooftree/svg.js"></script>
+        <script src="/resources/prooftree/prooftree.js"></script>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Proof Refinement Basics</h1>
+            <div class="content">
+                <p><em>posted by Beka on 28 Feb 2016</em></p>
+                
+                <p>In this blog post, I'm going to discuss the overall structure of a proof refinement system. Such systems can be used for implementing automatic theorem provers, proof assistants, and type checkers for programming languages. The proof refinement literature is either old or hard to understand, so this post, and subsequent ones on the same topic, will present it in a more casual and current way.</p>
+                
+                <h3>Proofs and Proof Systems</h3>
+                
+                <p>In the context of modern proof theory and type theory, a proof can be seen as a tree structure with labeled nodes and the class of proof trees which are valid is defined by a set of rules that specify how a node in a tree may relate to its child nodes. The labels, in the context of proofs, are usually hypothetical judgments, and the rules are inference rules, but you can also use the same conceptual framework for many other things.</p>
+                
+                <p>An example of a rule is <span class="code">for any choice of A and B, if you can show that A is true and that B is true, then it's permissible to conclude A&amp;B is true</span>. This is usually written with the notation</p>
+                
+                <pre class="proof">A∧B true ; ∧I
+  A true
+  B true</pre>
+                
+                <p>This rule explains one way that it's ok to have a node labeled <span class="code">A&amp;B is true</span> in a proof tree, namely, when its child nodes are <span class="code">A is true</span> and <span class="code">B is true</span>. So this rule justifies the circled node in the following tree:</p>
+                
+                !!!! TREE
+                
+                <p>When used as a tool for <em>constructive</em> a proof, however, we think about rule use in a directional fashion. We start from the conclusion — the parent node — because this is what we'd like to show, and we work backwards to the premises of the rule — the child nodes — to justify the conclusion. We think of this as a dynamic process of <em>building</em> a proof tree, not simply <em>having</em> one. From that perspective, the rule says that to build a proof tree with the root labeled <span class="code">A&amp;B is true</span>, we can expand that node to have two child nodes <span class="code">A is true</span> and <span class="code">B is true</span>, and then try to build those trees.</p>
+                
+                <p>In the dynamic setting, then, this rule means that we may turn the first tree below into the second:</p>
+                
+                !!!! TREE
+                
+                <p>In this setting, though, It's important to be aware of a distinction between two kinds of nodes: nodes which may appear in finished proof trees as is, and nodes which must still expanded before they can appear in a finished proof tree. In the above trees, we indicated this by the fact that the nodes which may appear in finished proof trees have a bar above them labeled by the name of the rule that justified them. Nodes which must still be expanded had no such bar, and we call them <em>goals</em>.</p>
+                
+                <h3>Building a Proof Refinement System</h3>
+                
+                <p>Let's now build a proof refinement system for a toy system, namely the system of addition as a relation among three natural numbers. We'll implement it in both Haskell and JavaScript to give a sense of how things work. We'll start by just making the proof refiner system, with no interactivity nor any automatic driving of the proof system. We'll have to rely on the REPL to manage these things for us.</p>
+                
+                <p>So the first thing we need is a definition of the naturals. In Haskell, we'll just use a normal algebraic data type, but in JavaScript, we'll use an object with a mandatory <span class="code">tag</span> key and an optional <span class="code">val</span> key, together with helpers:</p>
+                
+                <pre><code>-- Haskell
+
+data Nat = Zero | Suc Nat</code></pre>
+                
+                <pre><code>// JavaScript
+
+var zero = { tag: "zero" };
+
+function suc(n) {
+    return { tag: "suc", val: n };
+}</code></pre>
+                
+                <p>Similarly, we'll define the judgment in question:</p>
+                
+                <pre><code>-- Haskell
+
+data Judgment = Plus Nat Nat Nat</code></pre>
+                
+                <pre><code>// JavaScript
+
+function plus()</code></pre>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).</p>
+            </div>
+        </section>
+    </body>
+    
+    
+    <script>
+        const proofEls = document.getElementsByClassName("proof");
+        const proofs = [];
+        for (var i = 0; i < proofEls.length; i++) {
+            proofs.push(proofEls[i]);
+        }
+        
+        for (var i = 0; i < proofs.length; i++) {
+            let div = document.createElement("div");
+            div.style = "position: relative; left: 50%; margin: 15px 0 15px -300px;";
+            
+            let proof = proofs[i];
+            let svg = document.createElement("svg");
+            div.appendChild(svg);
+            let drawing = SVG(svg).size(500,200);
+            proof.parentNode.replaceChild(div,proof);
+            
+            renderProofTree(linesToTree(proof.innerHTML), drawing);
+            
+            div.style.height = drawing.bbox().height + "px";
+            div.style.width = drawing.bbox().width + "px";
+            
+        }
+    </script>
+</html>

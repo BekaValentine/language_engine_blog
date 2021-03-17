@@ -1,0 +1,22 @@
+- Compiling Pattern Matching
+  
+  - Why would we want to compile them?
+  
+  - What is a naive solution?
+  
+    - Try to define a way to combine patterns into "sum patterns"
+  
+  - Why does the naive fail?
+  
+    - How will this handle sequences of subterms? Pairwise summing won't work,
+      and having a list of alternative sequences leaves a lot of inefficiency
+      that we wanted to avoid
+    
+    - With a non-sum patterns, we can pair return clauses with patterns, but
+      with sum patterns, we have to pair return clauses with _sub-patterns_.
+      but then where should these go? on the smallest sub-patterns that have
+      no alternatives inside them? this seems tricky to implement
+  
+  - The main thing to observe: patterns are initial segments that must match
+    constructor-wise
+

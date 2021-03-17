@@ -1,0 +1,340 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Differentiating Regular Expressions</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Differentiating Regular Expressions</h1>
+            <div class="content">
+                <p><em>posted by Beka on ??? May 2016</em></p>
+                
+                
+                
+                <!-- intro -->
+                
+                <p>A while back, I was playing with regular expressions and derivatives of datatypes (in the sense of McBride, which you can read about <a href="http://strictlypositive.org/calculus/">here</a>). At some point it dawned on me that given any particular regular expression, the one-hole contexts into that expression have a tight connection to the states of a non-deterministic finite automata that recognizes the expression.</p>
+                
+                
+                
+                <!-- basic defs -->
+                
+                <h2>Holey Regular Expressions</h2>
+                
+                <p>First, I should be very precise about what sorts of things count as regular expressions for the sake of this post. I mean to include only true regular expressions here, not "regex" in the common sense. That is, only things that represent regular languages, whereas regex in general includes all sorts of context sensitive features. In particular, I'll define a minimal set of regular expression features, namely, sequencing, alternatives, optionality, and repetition. This is just for simplicity right now, and extending it to other features can be done later.</p>
+                
+                <p>So, we'll define a data type that represents regular expressions as follows:</p>
+                
+                <code>
+                    infixr 8 :>:
+                    infixr 9 :|:
+                    
+                    data Regex
+                      = Lit Char         -- individual characters are regexes
+                      | Regex :>: Regex  -- if E and F are regexes, so is EF
+                      | Regex :|: Regex  -- if E and F are regexes, so is E|F
+                      | Opt Regex        -- if E is a regex, so is E?
+                      | Rep Regex        -- if E is a regex, so is E+
+                </code>
+                
+                <p>We can now look at this and ask, what are the one-hole contexts that can exist for sub-regexes? Clearly there are size: the left and right arguments of @Seq@ and @Alt@, and the arguments of @Opt@ and @Rep@. So we need to have a datatype that represents a regular expression with one such subexpression removed. Or, alternatively, we want to talk about the positions inside a regular expression that a subexpression can exist.</p>
+                
+                <p>Lets consider the regular expression @a(b|c+)d@, which corresponds to the @Regex@ value @Lit 'a' :>: (Lit 'b' :|: Rep (Lit 'c')) :>: Lit 'd'@. If we imagine plucking @c@ out from this expression, we'll get an expression with a hole in it: @a(b|_+)d@ and we can of course plug in some other expression, such as @ef@ to get @a(b|(ef)+)d@.</p>
+                
+                <p>Visualizing these as trees:</p>
+                
+                !!!! IMG
+                
+                <p>To represent these, we'll use the tube representation of derivatives, which flattens out the path from the root to the hole into a list of local contexts. So what we'll need is a way of representing a hold in any particular constructor. That is, we need to represent a hole in the left argument position of @Seq@, the right argument position of @Seq@, etc.</p>
+                
+                <code>
+                    data LocalRegexContext
+                      = InSeqL Regex  -- a @Seq@ with the left arg removed
+                      | InSeqR Regex  -- a @Seq@ with the right arg removed
+                      | InAltL Regex  -- an @Alt@ with the left arg removed
+                      | InAltR Regex  -- an @Alt@ with the right arg removed
+                      | InOpt         -- an @Opt@ with its only arg removed
+                      | InRep         -- a @Rep@ with its only arg removed
+                    
+                    type RegexContext = [LocalRegexContext]
+                </code>
+                
+                <p>A list of these things corresponds to a regular expression with a single hole, because we can plug in any expression into the first such context, to form a new regular expression, then plug that into the next context, and so on, until we've built the entire new expression.</p>
+                
+                <p>The @Regex@s that are arguments to the context constructors are the parts of the regular expression that haven't been removed. That is, if we remove the left expression in @EF@, we're left with @_F@ where we still have @F@ lying around. So @E :>: F@ would become @InSeqL F@, for example.</p>
+                
+                <p>Using the example from earlier of the holey regular expression @a(b|_+)d@, we would represent this as the list</p>
+                
+                <code>
+                    demoCtx :: RegexContext
+                    demoCtx =
+                      [ InRep
+                      , InAltR (Lit 'b')
+                      , InSeqL (Lit 'd')
+                      , InSeqR (Lit 'c')
+                      ]
+                </code>
+                
+                <p>We can define a function to plug a @Regexp@ into a @RegexContext@ relatively easily:</p>
+                
+                <code>
+                    plug :: Regex -> LocalRegexContext -> Regex
+                    plug e (InSeqL f) = e :>: f  -- e in _f is ef
+                    plug e (InSeqR f) = f :>: e  -- e in f_ is fe
+                    plug e (InAltL f) = e :|: f  -- e in _|f is e|f
+                    plug e (InAltR f) = f :|: e  -- e in f|_ is f|e
+                    plug e InOpt      = Opt e    -- e in _? is e?
+                    plug e InRep      = Rep e    -- e in _+ is e+
+                </code>
+                
+                <p>To plug into a whole list of these, we of course just left fold with plug:</p>
+                
+                <code>
+                    plugContext :: Regex -> RegexContext -> Regex
+                    plugContext e c = foldl plug e c
+                    
+                    {-
+                      plugContext e demoContext
+                      == Lit 'a' :>: (Lit 'b' :|: Rep e) :>: Lit 'd'
+                    -}
+                </code>
+                
+                
+                
+                <!-- NFAs -->
+                
+                <p>Let's now consider a simple algorithm for turning regular expressions into non-deterministic finite automata. I won't give a formal definition, but instead just a visual presentation that transforms a regular expression into a state diagram.</p>
+                
+                <p>I'll write a regular expression inside double brackets, which will transform into parts of the NFA that match the regular expression. Directed edges going to and from the brackets will represent the entry and exit points of the regular expression's sub-component of the NFA, connecting to the rest of the NFA that the expression is part of. We'll construct the NFA for a whole regular expression @R@ by beginning with @R@ in brackets connected to a initial state and final state, like so:</p>
+                
+                !!! IMG
+                
+                <p>We need to gradually transform @[[R]]@ into the NFA, so we need rules for doing this. The rules are fairly simple. If @R@ is just a single character @x@, then we replace it with an edge labelled @x@, like so:</p>
+                
+                !!! IMG
+                
+                <p>To handle sequencing, we'll transform it into recursive bracketed expressions for the parts of the sequence, adding some nodes, all connected in sequence:</p>
+                
+                !!! IMG
+                
+                <p>This isn't the most efficient choice, but it does give each state a very clear relationship to each subexpression. The state before the first subexpression means "about to start the first subexpression", the state after means "just finished the first subexpression", and so on.</p>
+                
+                <p>Alternation is similarly easy to define. We'll transform into recursive bracketed expressions and nodes for the alternatives, connected in parallel:</p>
+                
+                !!! IMG
+                
+                <p>Optionality introduces nodes with an edge that can skip the recursive bracketed subexpression:</p>
+                
+                !!! IMG
+                
+                <p>And repetition introduces nodes with an edge that lets you go back to the beginning of the subexpression:</p>
+                
+                !!! IMG
+                
+                <p>Now again, this isn't the most efficient representation, because it'll produce lots of states that are unnecessary, but this does ensure that every state corresponds to a subexpression of the whole regular expression. And moreover, each subexpression has two associated states, one that means "about to start the subexpression" and "just finished the subexpression".</p>
+                
+                <p>As an example, consider the process of building the NFA for @a(b|c+)d@:</p>
+                
+                !!! IMG
+                
+                
+                
+                
+                <!-- connection to derivatives -->
+                
+                <h2>States and Derivatives</h2>
+                
+                <p>Each subexpression of a regular expression can be thought of as the subexpression paired with the one-hole context. We need the context because the subexpression exists inside a larger expression, which the context represents. And each subexpression pairs with two states, a starting state and a finishing state. We can therefore represent the state of a regex by a triple:</p>
+                
+                <code>
+                    data Direction = Starting | Finishing
+                    
+                    type RegexState = (Direction, Regex, RegexContext)
+                </code>
+                
+                <p>Any given @RegexState@ @(c,d,e)@ corresponds to the state that is starting/finishing (@d@) the subexpression @e@ in the context of the total regular expression @plugContext e c@.</p>
+                
+                <p>For any given regular expression, there is a fixed collection of @RegexState@s that correspond to its subexpressions, and these are precisely the states of it's NFA. Below is the NFA for @a(b|c+)d@ again, but this time with its states labelled by the @RegexState@s.</p>
+                
+                !!! IMG
+                
+                
+                
+                
+                <!-- transitions -->
+                
+                <h2>State Transitions</h2>
+                
+                <p>For any regular expression @e@, the start state of its NFA is @(Starting,e,[])@ and the final state is @(Finishing,e,[])@, which means we have an easy way to jump into an NFA given just a regular expression, and we have an easy way of knowing when the expression has been fully matched.</p>
+                
+                <p>If this were the only connection between derivatives and NFAs, it'd be interesting but boring. However, we can use the @RegexState@ type to define the transition function for NFAs in a generic fashion. That is to say, we can define a function @next :: RegexState -> [RegexState]@ which can compute the next state of the NFA that the specified state comes from, and moreover, the function is independent of the particular NFA. It's defined as follows:</p>
+                
+                <code>
+                    next :: RegexState -> [RegexState]
+                    
+                    -- this group corresponds to the edges out of starting states
+                    next (Starting, Lit x, c)   = [ (Finishing, Lit x, c) ]
+                    next (Starting, e :>: f, c) = [ (Starting, e, InSeqL f : c) ]
+                    next (Starting, e :|: f, c) = [ (Starting, e, InAltL f : c)
+                                                  , (Starting, f, InAltR e : c)
+                                                  ]
+                    next (Starting, Opt e, c)   = [ (Starting, e, InOpt : c)
+                                                  , (Finishing, Opt e, c)
+                                                  ]
+                    next (Starting, Rep e, c)   = [ (Starting, e, InRep : c) ]
+                    
+                    -- this group corresponds to the edges out of finishing states
+                    
+                    next (Finishing, e, InSeqL f : c) = [ (Starting, f, InSeqR e : c) ]
+                    next (Finishing, f, InSeqR e : c) = [ (Finishing, e :>: f, c) ]
+                    next (Finishing, e, InAltL f : c) = [ (Finishing, e :|: f, c) ]
+                    next (Finishing, f, InAltR e : c) = [ (Finishing, e :|: f, c) ]
+                    next (Finishing, e, InOpt : c)    = [ (Finishing, Opt e, c) ]
+                    next (Finishing, e, InRep : c)    = [ (Finishing, Rep e, c)
+                                                        , (Starting, e, InRep : c)
+                                                        ]
+                    next _ = []
+                </code>
+                
+                <p>So, given any regular expression, we can turn it into the initial state of its NFA with no effort, and then transition around its NFA using @next@. We know when the NFA has finished, because we can just inspect the states to look for the final state.</p>
+                
+                            
+                
+                
+                
+                <!-- generating -->
+                
+                <h2>Generating Strings</h2>
+                
+                <p>We wouldn't want to use the @next@ function to actually transition around a regular expression for matching, however, because it's extremely inefficient, but it's perfectly reasonable for generating random strings that match a given regular expression. Each transition gives a list of next states, and whenever there's more than one, as for alternation and repetition, we can make a choice of which path to choose.</p>
+                
+                <p>Let's define such a function. Rather than using actual randomness, we'll just conventionally chose to explore the first state in the list returned by @next@. This guarantees that we take left branches of alternation, and to always finish a repetition (thus avoiding loops).</p>
+                
+                <code>
+                    generateFirst :: Regex -> String
+                    generateFirst e = go (Starting, e, [])
+                      where
+                        go :: RegexState -> String
+                        go s = case next s of
+                          
+                          -- when there are no next states, we're done
+                          [] -> ""
+                          
+                          -- if there's one next state and it's a literal, emit a character
+                          [ s'@(Finishing, Lit x, c) ] -> x : go s'
+                          
+                          -- otherwise go to the first next state
+                          s':_ -> go s'
+                <code>
+                
+                <p>Using our trusty friend @a(b|c+)d@ with @generate@, we get the expected:</p>
+                
+                <code>
+                    generateFirst (Lit 'a' :>: (Lit 'b' :>: Rep (Lit 'c')) :>: Lit 'd')
+                    == "abd"
+                </code>
+                
+                <p>The @go@ function above is where the bulk of the generation happens. It steps the NFA to the next state, one state at a time, and if that state happens to be finishing a literal character expression, it sticks that character on the front of the rest of the NFA's output.</p>
+                
+                <p>Unfortunately this is really inefficient, and won't generalize. Let's ignore for a moment the fact that we're picking the first next state and pretend that somehow we explore each next state. If we wanted to generate a string that's 10 characters long, and we use the above technique, we'd need to keep stepping until at some point we've generated 10 characters, and many of the states we end up in after a single transition won't be ones that have emitted a character.</p>
+                
+                <p>It would be nicer if we instead had a function @emit@ which transitioned the NFA as far as necessary to emit exactly one character. Then to get 10 characters, we just repeatedly apply the @emit@ function 10 times. Let's define such a function.</p>
+                
+                <code>
+                    emit :: RegexState -> [(Char,RegexState)]
+                    emit s =
+                      do s' <- next s
+                         case s' of
+                           (Finishing, Lit x, _) -> [ (x,s') ]
+                           _ -> emit s'
+                </code>
+                
+                <p>Next, we'll need a function that's will try to run an NFA to its final state without emitting anything. This lets us know if the NFA can complete from its current state by making only empty transitions.</p>
+                
+                <code>
+                    finishesTrivially :: RegexState -> Bool
+finishesTrivially (Starting, Lit _, _) = False
+finishesTrivially (Starting, e :>: f, c) = finishesTrivially (Starting, e, InSeqL f : c)
+finishesTrivially (Starting, e :|: f, c) = finishesTrivially (Starting, e, InAltL f : c)
+finishesTrivially (Starting, Opt e, c) = finishesTrivially (Finishing, Opt e, c)
+finishesTrivially (Starting, Rep e, c) = finishesTrivially (Starting, e, InRep : c)
+finishesTrivially (Finishing, _, []) = True
+finishesTrivially (Finishing, e, InSeqL f : c) = finishesTrivially (Starting, f, InSeqR e : c)
+finishesTrivially (Finishing, f, InSeqR e : c) = finishesTrivially (Finishing, e :>: f, c)
+finishesTrivially (Finishing, e, InAltL f : c) = finishesTrivially (Finishing, e :>: f, c)
+finishesTrivially (Finishing, f, InAltR e : c) = finishesTrivially (Finishing, e :>: f, c)
+finishesTrivially (Finishing, e, InOpt : c) = finishesTrivially (Finishing, Opt e, c)
+finishesTrivially (Finishing, e, InRep : c) = finishesTrivially (Finishing, Rep e, c)
+                </code>
+                
+                <p>Finally, we can generate by repeatedly stepping until we get to a state that can finish trivially:</p>
+                
+                <code>
+                    generateN :: Int -> Regex -> [String]
+                    generateN n e = go n [("", (Starting, e, []))]
+                      where
+                        go :: Int -> [(String,RegexState)] -> [String]
+                        go 0 ss = [ reverse rcs | (rcs,s) <- ss, finishesTrivially s ]
+                        go n ss = let ss' = do
+                                        (rcs,s) <- ss
+                                        (c,s') <- emit s
+                                        return (c:rcs, s')
+                                  in go (n-1) ss'
+                </code>
+                
+                <p>Testing this out on the expression @a(b|c+)d@ for lengths 1 and 2, we predictably get nothing, for length 3 we get "abd" and "acd", for length 4 we get "accd", and so on.</p>
+                
+                
+                
+                
+                <!-- parsing -->
+                
+                <h2>Recognizing with Regular Expressions</h2>
+                
+                <p>If we have an operation like @emit@, we can also do recognition of strings relatively easily. We simply emit characters, and get rid of all the states that didn't result from emitting the next character in the match string. This is the Thompson NFA algorithm, which you can read about <a href="https://swtch.com/~rsc/regexp/regexp1.html">here</a>.</p>
+                
+                <p>To start, let's define a single step consumer that couples @emit@ with consumption of an input character:</p>
+                
+                <code>
+                    consume :: Char -> RegexState -> [RegexState]
+                    consume c s = [ s' | (x,s') <- emit s, c == x ]
+                </code>
+                
+                <p>What we'd like to do, then, is repeatedly consume the next character off a string until either the string is empty and one of the current states can finish trivially, in which case we've succeeded, or otherwise we've failed. So then:</p>
+                
+                <code>
+                    recognize :: String -> Regex -> Bool
+                    recognize cs e = go cs [(Starting, e, [])]
+                      where
+                        go :: String -> [RegexState] -> Bool
+                        go "" ss = any finishesTrivially ss
+                        go (c:cs) ss = go cs [ s' | s <- ss, s' <- consume c s
+                </code>
+                
+                <p>This now gives us precisely what we want. If we test it on our old trust friend @a(b|c+)d@ and the matching strings @abd@, @acd@, @accd@, and @acccd@, we get true for all of them, and if we try it on the non-matching strings @abbd@ and @efg@, we get false.</p>
+                
+                
+                
+                <!-- conclusion -->
+                
+                <h2>Wrap Up</h2>
+                
+                <p>In an eventual future blog post, I plan to explore a general framework for encoding this approach that will make it easier to add new features to the matched expressions. The goal will be to be able to represent things such as capture groups and back references. There are also some interesting possibilities such as representing finite state transducers instead of just recognizers.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).</p>
+            </div>
+        </section>
+    </body>
+</html>

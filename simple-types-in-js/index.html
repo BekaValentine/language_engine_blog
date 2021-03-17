@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Simple Types in JS</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Simple Types in JS</h1>
+            <div class="content">
+                <p><em>posted by Beka on 23 Dec 2014</em></p>
+                
+                <p>In this post, I'm going to show you how to implement a type checker using JavaScript. JS is not the most ideal language for this, unfortunately, because it lacks a good type system of its own, and makes a bunch of stuff really ugly and noisy, but in a way, that's ideal. It'll give you a sense of what you'd have to do in other languages with similarly impoverished type systems. The way I'm going to implement it should be relatively easy to translate into idiomatic code in various.</p>
+                
+                <p>I'm assuming you know a little bit about type theory, such as having looked at the Pfenning videos that I posted in <a href="https://www.purelytheoretical.com/sywtltt.html">this little guide</a>. If not, I highly recommend you brush up, otherwise some of this might be confusing.</p>
+                
+                <p>Our first task is to figure out just what the type theory is that we want to implement. To keep things simple, we'll implement only four types (and add some more later). We'll have pair types and function types, which will be the interesting cases, and we'll also have two types <span class="code">Foo</span> and <span class="code">Bar</span> which won't do anything except give us two base types to work with. We won't be able to do much programming with just these, but we'll still be able to see how a type checker works.</p>
+                
+                <p>So let's define the type theory. First we'll define a judgment <span class="code">A type</span> which will serve as an internal way of represent when something is or isn't a well-formed type:</p>
+                
+                <p class="code">
+                    A type<br/>
+                    ======<br/><br/>
+                    
+                    -------- Foo-Formation
+                    Foo type
+                    
+                    -------- Bar-Formation
+                    Bar type
+                    
+                    A type    B type
+                    ---------------- *-Formation
+                        A*B type
+                    
+                    A type    B type
+                    ---------------- ->-Formation
+                      A -> B type
+                </p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).<!-- Here's <a href="https://news.ycombinator.com/item?id=8756903">the HN thread</a> if you prefer that mode, and also <a href="http://www.reddit.com/r/programming/duplicates/2pgq72/implementing_language_engine_pluralities_in/">the Reddit threads</a>.--></p>
+                
+            </div>
+        </section>
+    </body>
+</html>

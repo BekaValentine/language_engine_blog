@@ -1,0 +1,162 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Making Sense of Subtypes</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Making Sense of Subtypes</h1>
+            <div class="content">
+                <p><em>posted by Beka on 16 Apr 2015</em></p>
+                
+                <p>Subtypes are notoriously easy to mess up when designing a programming language, but they really shouldn't be. I think part of the reason is that most people try to set out their subtyping rules by gut instinct, because they don't really know how to do it properly. I don't know of any good tutorial on this, so fair enough. Here's that tutorial.</p>
+                
+                <h3>Subtypes</h3>
+                
+                <p>The general idea of subtyping is that some things (some values, some objects, whatever) of one type are more or less a variety of some other type. For instance, integers are a variety of real number, oaks are a variety of trees, and so on. Most programmers are familiar with this in the context of object oriented programming and subclasses. This is summed up quite nicely by the Liskov Substitution Principle, which states that if <code>P(x)</code> is true for any <code>x</code> of type <code>A</code>, and <code>B</code> is a subtype of <code>A</code>, then <code>P(y)</code> is true for any <code>y</code> of type <code>B</code>. Or to put it into concrete terms, if we know something about trees, and oaks are a kind of tree, then we know something about oaks.</p>
+                
+                <p>This leads to some initially counter-intuitive facts, however. Contravariance, for instance, is a frequent issue that language designers get wrong, and this leads to quite a number of bugs. Of the following two possible rules for subtyping, one is very wrong, the other is very right. Which is which?</p>
+                
+                <pre><code>Proposal 1:
+  If   A is a subtype of A',
+  And  B is a subtype of B',
+  Then A -> B is a subtype of A' -> B'
+
+Proposal 2:
+  If   A' is a subtype of A,
+  And  B is a subtype of B',
+  Then A -> B is a subtype of A'</code></pre>
+                
+                <p>If you picked (1), congratulations! You just broke your programming language! But don't worry, you're in good company.</p>
+                
+                <h3>Rules for Pair Subtyping</h3>
+                
+                <p>To pin down subtypes, I'm going to use a type theoretic presentation of a number of common types from the Simply Typed Lambda Calculus, namely pairs types, function types, and sum/disjoint union types. Hopefully this won't be too out of people's comfort zones. If it is, I suggest checking out <a href="http://languagengine.co/blog/so-you-want-to-write-a-type-checker/">my blog post on building a type checking in JS</a> or looking at some of the things on my <a href="http://purelytheoretical.com/sywtltt.html">my suggested reading/watching</a>.</p>
+                
+                <p>Let's consider pairs first. If you've got a pair <code>p : Integer * Oak</code>, we expect that we should be able to use it wherever we need a pair of type <code>Real * Tree</code>, because, after all, <code>Integer</code>s are <code>Real</code>s, and <code>Oak</code>s are <code>Tree</code>s, right? Pairing them up doesn't change that. The key words here are <em>use</em> and <em>need</em>. We should be able to <em>use</em> the one wherever we <em>need</em> the other.</p>
+                
+                <p>In type theoretic terms, this means we want to be able to write a typing derivation that looks like this:</p>
+                
+                <pre><code>M : A*B   A*B &gt;: A'*B'
+------------------------- subtype
+        M : A'*B'
+            :
+            :
+            :
+    some proof needing
+  a program of type A'*B'</code></pre>
+                
+                <p>To make this work, we need to explain when we're allowed to conclude <code>A*B &gt;: A'*B'</code> (<code>A*B</code> is a subtype of <code>A'*B'</code>). Suppose, however, that we didn't have subtyping. What would we do then? Well, we would need some kind of conversion function <code>convert : A*B -> A'*B'</code> that we could apply. For instance, <code>integerToReal</code> or <code>oakToTree</code>. When the types are merely convertible, not truly subtypes, this is necessary, but if one type really is just a special kind of another type, no conversion should be necessary, we just need to convince the type system that it's ok to do. In some sense, that's exact what the statement <code>A*B &gt; A'*B'</code> does. It almost means the same thing as <code>A*B -> A'*B'</code>, but restricted to functions that are, more or less, the identity function, and which therefore don't even have to be written because they don't do anything. Of course, we probably need to know how to break this problem down into sub-problems based on <code>A</code>, <code>B</code>, <code>A'</code>, and <code>B'</code> since we don't think it should work for any random choice of those.</p>
+                
+                <p>This gives us a hint now what the right approach to subtyping is: if <code>A*B &gt; A'*B'</code> is more or less an identity function, but one that relies on breaking down the problem into subproblems by the types, then perhaps we can think in terms of a well-known identity function that does the very same thing: eta expansion. The process of eta expanding a value is simply one of converting it into an equivalent value (equivalent in terms of how you can <em>use</em> it), given ways of doing the same for sub-problems based on the types. For pairs, this just means splitting the pair into its parts, then putting them back together again. Given a pair <code>p : A*B</code>, we split into <code>fst(p) : A</code> and <code>snd(p) : B</code>, and then re-pair them as <code>(fst(p), snd(p))</code>. Or if you prefer case analysis, <code>case p of { (x,y) -> (x,y) }</code>.</p>
+                
+                <p>In terms of behavior, hese expansions do nothing at all, which is why they constitute an identity. What if, however, we used subtyping rules instead of the recursive eta expansion? Well, we'd turn <code>fst(p) : A</code> into <code>fst(p) : A'</code> using <code>A &gt;: A'</code>, and similarly, we'd turn <code>snd(p) : B</code> into <code>snd(p) : B'</code> using <code>B &gt;: B'</code>, so when we paired them up, we'd get <code>(fst(p), snd(p)) : A'*B'</code>. Hey wait a minute! We just turned <code>p : A*B</code> into <code>(fst(p),snd(p)) : A'*B'</code> in a way that we know preserves behavior, and it works for any such <code>p</code>! Surely that would means <code>A*B</code> is a subtype of <code>A'*B'</code>!</p>
+                
+                <p>Let's look at the full derivation we just proposed:</p>
+                
+                <pre><code> p : A*B                                p : A*B
+---------- fst                         ---------- snd
+fst(p) : A       A &gt; A'             snd(p) : B       B &gt; B'
+-------------------------- subtyping   -------------------------- subtyping
+        fst(p) : A'                            snd(p) : B'
+        -------------------------------------------------- pair
+                    (fst(p), snd(p)) : A'*B'</code></pre>
+                
+                <p>In some sense, this proof schema justifies the claim that <code>A*B &gt; A'*B'</code> whenever we know <code>A &gt; A'</code> and <code>B &gt; B'</code>, because we could, if necessary, decompose the larger claim into a proof using the smaller pieces using proof that's almost an eta expansion. Or to put it another way, we're allowed to add the following subtyping rule because if we ever use it's conclusion (which we might be skeptical about), we can always convert to using its premises (which we're less skeptical about):</p>
+                
+                <pre><code>A &gt;: A'   B &gt;: B'
+----------------------- subtyping
+    A*B &gt; A'*B'</code></pre>
+                
+                <p>The trick in general would seem to then be: construct an eta expansion, but insert uses of the subtyping rule wherever we can. This tells you the premises for the new subtyping rule you want. The input type and the resulting type tell you the left and right sides of the subtyping relation, respectively, for the conclusion.</p>
+                
+                <p><img src=""/></p>
+                
+                <h3>Rules for Sum Subtyping</h3>
+                
+                <p>Sum types are little trickier, because their eta expansion puts us into a case expression, but the same trick works. Here's eta expansion for sums:</p>
+                
+                <pre><code>              ----- var            ----- var
+              x : A                y : B
+          ------------- left   -------------- right
+s : A+B   left(x) : A+B        right(y) : A+B
+--------------------------------------------- case
+       case s of
+         { left(x) -> left(x)    : A+B
+         ; right(y) -> right(y)
+         }</code></pre>
+                
+                <p>Now, we can't use the subtyping rule before the variables are types <code>A</code> and <code>B</code>, respectively, because the case rule prevents us, but we can use subtyping after that, to produce</p>
+                
+                <pre><code>          ----- var                        ----- var
+          x : A       A &gt;: A'           y : B       B &gt;: B'
+          ---------------------- subtype   ---------------------- subtype
+                       x : A'                      y : B'
+                   --------------- left       ---------------- right
+s : A+B            left(x) : A'+B'            right(y) : A'+B'
+-------------------------------------------------------------- case
+              case s of
+                { left(x) -> left(x)    : A'+B'
+                ; right(y) -> right(y)
+                }</code></pre>
+                
+                <p>So now we know we can add the subtyping rule</p>
+                
+                <pre><code>A &gt;: A'   B &gt;: B'
+----------------------- subtype
+    A+B &gt; A'+B'</code></pre>
+                
+                <h3>Rules for Function Subtyping</h3>
+                
+                <p>Let's now take a look at the often tricky case of functions. First lets construct an eta expansion for a function:</p>
+                
+                <pre><code>             ----- var
+f : A -> B   x : A
+------------------ app
+     f x : B
+ ---------------- lambda
+ \x. f x : A -> B</code></pre>
+                
+                <p>If we now try to insert uses of the subtyping rule wherever possible, we can put it before the variable has type <code>A</code>, and after the application has type <code>B</code>:</p>
+                
+                <pre><code>             ----- var
+             x : A'      A' &gt;: A
+             --------------------- subtype
+f : A -> B           x : A
+-------------------------- app
+         f x : B                 B &gt;: B'
+         --------------------------------- subtype
+                     f x : B'
+                ------------------ lambda
+                \x. f x : A' -> B'</code></pre>
+                
+                <p>And what do you know, this leads us to the correct subtyping rule for functions with a <em>contravariant</em> argument:</p>
+                
+                <pre><code>A' &gt;: A   B &gt; B'
+---------------------- subtype
+A -> B &gt;: A' -> B'</code></pre>
+                
+                <h3>Discussion</h3>
+                
+                <p>This approach can work in general, provided that there's some notion of eta expansion. Making it work correctly for objects in an OO language will be somewhat tricky because objects don't have to expose all of their innards to allow you to reconstruct them, but you can deal with that by treating the object's hidden internals as an existentially quantified type. This produces exactly the right sort of subtyping rules for the various methods (constructor methods included!).</p>
+                
+                <p>The uniformity of this approach is also nice because it can be completely mechanized. Any type can be automatically given appropriate subtyping rules without human input. This means that if you've designed your programming language in a type theoretic way (and had the right developer tools), you would never mess up your subtyping rules, thereby avoiding lots of deep bugs in your language.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).<!-- Here's <a href="https://news.ycombinator.com/item?id=8756903">the HN thread</a> if you prefer that mode, and also <a href="http://www.reddit.com/r/programming/duplicates/2pgq72/implementing_language_engine_pluralities_in/">the Reddit threads</a>.--></p>
+                
+            </div>
+        </section>
+    </body>
+</html>

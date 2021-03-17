@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Parsing Malformed Input</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Parsing Malformed Input</h1>
+            <div class="content">
+                <p><em>posted by Beka on 12 Feb 2015</em></p>
+                
+                <p>In this post I want to talk about parsing inputs that might be malformed in some way. That is to say, this is about handling parse errors. Why might we want to do this? Well, if you're parsing a programming language, it's helpful to be able to inform the programmer why their code is malformed. If you're parsing a natural language, then there's a good chance that the speaker or writer won't provide perfectly grammatical sentences as input.</p>
+                
+                <h3>The Standard NLP Approach</h3>
+                
+                <p>In NLP, the typical way of coping with ungrammaticality is to use a grammar formalism that eliminates the concept of grammaticality entirely, replacing it with a measure of likeliness, typically a probabilistic context-free grammar (PCFG). All inputs are parsable, no matter what, but they have varying probabilities. The ones we humans consider more grammatical tend to be the more probable parses.</p>
+                
+                <p>To some extent, this isn't so bad. After all, we do get a sense, as speakers of a language, that sentences can have shades of grammaticality. Even when we talk about sentences being ungrammatical, some ungrammatical sentences are worse than others. For instance, "Brutus stab Caesar" is way better than "the the the". Both are malformed, but you probably don't even consider the second one to be a candidate for being a sentence — it's just gibberish!</p>
+                
+                <p>The NLP approach would parse both of these sentences happily, and just assign them lower probability than a nearby grammatical sentence. And "the the the" would probably get a much lower score than "Brutus stab Caesar". But this approach has a substantial flaw: because probabilistic parsing produces multiple candidates, we have to pick one, typically the most probable, but this is often not a very good or reasonable parse.</p>
+                
+                <p>Consider, for example, the following ungrammatical sentence: "the man put the book the table". It's missing a preposition. Obviously it should be "the man put the put <em>on</em> the table", or something similar to that. But using <a href="http://nlp.stanford.edu:8080/parser/index.jsp">the online version of the Stanford Parser</a>, this input parses as</p>
+                
+                <pre><code>(NP
+  (NP (DT the) (NN man) (NN put))
+  (NP (DT the) (NN book))
+  (NP (DT the) (NN table)))</code></pre>
+                
+                <p>That is to say, the Stanford Parser (at least the one from 2012) thinks the most likely parse for this is a complex noun phrase containing a sequence of three daughter noun phrases, and that's all. Bizarrely, if you change "the man" to "John", the parse is closer to being ideal:</p>
+                
+                <pre><code>(S
+  (NP (NNP John))
+  (VP (VBD put)
+    (NP (DT the) (NN book))
+    (NP (DT the) (NN table))))</code></pre>
+                
+                <p>And if you instead change "the book" to "it", it becomes .. a little better and a little worse:</p>
+                
+                <pre><code>(S
+  (NP (DT the) (NN man))
+  (VP (VBD put)
+    (S
+      (NP (PRP it))
+      (NP (DT the) (NN table)))))</code></pre>
+                
+                <p>We now get a sentence with the main verb "put", but for some weird reason, its direct object is a sentence consisting of just two noun phrases. This is all rather weird, because the error is solely to do with a missing preposition, and yet only the middle parse is even close to highlighting that.</p>
+                
+                <h3>The Compiler Approach</h3>
+                
+                <p>Compilers for programming languages also have to cope with errors, but unlike natural language, programming languages are almost never ambiguous and have lots of delimiters that mark the boundaries of things. Parentheses, braces, keywords, commas, etc. all help to make parsing much simpler for compilers and interpreters to do. The typical response to an error is simply to stop parsing and spit out an error message. For instance, here's an error from the Haskell compiler GHC, when given the input <code>foo = if x else y else z</code>:</p>
+                
+                <pre><code>ParseError.hs:1:12:
+    parse error on input ‘else’</code></pre>
+                
+                <p>The error tells us exactly where the first errorful position is, and what caused it. That's very useful, much more than simply saying the program has some low probability as in the NLP approach. But simply stopping at the first sign of a problem isn't ideal. It would be much nicer if the parser could continue parsing and tell us "you wrote <code>else</code> but you probably meant <code>then</code>". Or consider this parse error from the slightly different program <code>if x y else z</code>:</p>
+                
+                <pre><code>ParseError.hs:1:14:
+    parse error on input ‘else’</code></pre>
+                
+                <p>Almost the same error, just at a different position. Wouldn't it be nicer if instead the parser could say "I think you're missing <code>then</code> in between <code>x</code> and <code>y</code>"?</p>
+                
+                <h3>Different Approaches for Different Tasks</h3>
+                
+                <p>The NLP and compiler approaches to error handling exist because they have typically very different goals in mind. A compiler simply cannot compile malformed source code into a program, so compilers take an all-or-nothing approach to error handling. On the other hand, most NLP applications can function rather well for their goals by having extremely fuzzy, probabilistic parsing. If you're doing sentiment analysis, for instance, you really don't care about correct parses, just certain structural properties. In fact, you don't even care about particular structural properties, you only care that <em>some</em> properties exist. Even if the parse trees are wrong, if they're all wrong in the same way, you can (hopefully!) classify sentences by sentiment.</p>
+                
+                <p>But Language Engine is something of a hybrid task. It deals with natural language, and so naturally it has to cope with grammaticality more like the NLP approach — it has to fail gracefully. But because Language Engine interprets meanings of sentences and converts them to actions, it has to be fairly strict in what counts as grammatical, because otherwise you get sentences that <em>have no meaning</em>, like trying to write <code>f(then)</code>. This calls for a hybrid approach to parse errors.</p>
+                
+                <h3>Example Errors</h3>
+                
+                <p>Before trying to tackle this problem, it'd be good to lay out what the ideal behavior should be that we would like to get out of such a parser. I'll give examples both for English and for a simple mathematical expression language.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).<!-- Here's <a href="https://news.ycombinator.com/item?id=8756903">the HN thread</a> if you prefer that mode, and also <a href="http://www.reddit.com/r/programming/duplicates/2pgq72/implementing_language_engine_pluralities_in/">the Reddit threads</a>.--></p>
+                
+            </div>
+        </section>
+    </body>
+</html>

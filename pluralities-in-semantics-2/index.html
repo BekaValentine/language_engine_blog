@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="http://fonts.googleapis.com/css?family=Josefin+Sans:100,300,600" rel="stylesheet" type="text/css">
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+                <a href="/blog">Blog</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Pluralities in Semantics</br>(part 2)</h1>
+            <div class="content">
+                <p><em>posted by Beka on 11 Dec 2014</em></p>
+                
+                <p>I ended the <a href="...">previous post</a> by suggesting that a set-based approach to pluralities, as in</p>
+                
+                <p class="code">
+                    [[John and Susan lifted the grate]] = lifted({john,susan}, {crate})
+                </p>
+                
+                <p>would not work well for at least two reasons:</p>
+                
+                <p>Firstly, sentences like "John lifted the crate with Susan" should mean more or less the same thing as "John and Susan lifted the crate" on the collective-lifting reading, but there is no single noun phrase that has both John and Susan, so we would need some really rather fancy way to get that single set from two distinct noun phrases.</p>
+
+                <p>And secondly, we want to store these predicates — stabbed, spoke, lifted, surrounded — in a database, we would need to have compound data columns, which can be rather nasty since these sets can be arbitrarily large. Logically it's no problem, but computationally it's a bit of a mess to have that.</p>
+
+                <p>The task of this post is to present an alternative representation that doesn't have these problems. But before I can do that, we need to detour a little bit to discuss adverbial modification. In the following brief discussion, I will revert to a set-free framework, since that's where we're headed anyway.</p>
+                
+                <p>Consider the sentence "Stephen drank coffee". We've been assuming that the meaning of this should look something like</p>
+                
+                <p class="code">
+                    drank(stephen,coffee)
+                </p>
+                
+                <p>but what if we added an adverbial, such as "today", to produce the sentence "Stephen drank coffee today"? We need a way to express what this means. The simple option is to say there's some kind of propositional operator — some predicate that takes propositions as arguments, such as &amp;. For instance, we might propose this:</p>
+                
+                <p class="code">
+                    time(drank(stephen,coffee), today)
+                </p>
+            </div>
+        </section>
+    </body>
+</html>

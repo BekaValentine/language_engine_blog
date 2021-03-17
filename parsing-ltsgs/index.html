@@ -1,0 +1,107 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Parsing LTSGs</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Parsing LTSGs</h1>
+            <div class="content">
+                <p><em>posted by Beka on 21 Feb 2015</em></p>
+                
+                <p>In this blog post, I want to follow up on my previous post about robust error handling when parsing by discussing one interesting, though imperfect, solution to the problem that we get by using a Lexicalized Tree Substitution Grammar (LTSG), which is a non-adjunction fragment of a Lezicalized Tree Adjoining Grammar. If you're not familiar with TAGs or LTAGs, <a href="http://www.let.rug.nl/~vannoord/papers/diss/diss/node59.html">this tutorial</a> provides an excellent overview. The section on constraint-based TAGs isn't necessary, just the ones up to LTAGs.</p>
+                
+                <h2>A Property of LTSGs</h2>
+                
+                <p>There is a relatively straight forward observation that we can make about LTSGs (and indeed all LTAGs) which is that given any initial sequence of initial trees corresponding to words, if there is a parse at all, then the parse tree's nodes are all already present in the collection of initial trees. All that's missing is the ways these initial trees compose together to form the final parse tree.</p>
+                
+                <p>For instance, consider the sentence <em>the pilot banked</em>. If we take this sequence of words and extend it to have initial trees, like on the left below, then it can parse to the tree on the right:</p>
+                
+                <p><img src="img1.jpg" /></p>
+                
+                <p>Here's the same parse tree, but with the initial trees circled, to highlight the fact that the parse tree has no additional nodes or structure that weren't present in those initial trees:</p>
+                
+                <p><img src="img2.jpg" /></p>
+                
+                <p>This means that if we're trying to parse an input as a tree rooted at a node <code>S</code>, lets say, then that node must already be present in the initial trees that come from the words in the input. One of those initial trees must be the one that forms the root of parse tree we want. A parsing algorithm is readily extracted from this.</p>
+                
+                <h2>A Basic LTSG Parsing Algorithm</h2>
+                
+                <p>The algorithm we want is easier to explain if we simplify first: lets assume that all our initial trees have at most one non-terminal frontier node to the left of the lexical head, and at most one to the right of the lexical head. So for instance, the trees for the verbs "banked" and "saw" have this property, but the tree for "gave" does not:</p>
+                
+                <p><img src="img3.jpg" /></p>
+                
+                <p>We'll come to the "give"-like trees shortly, but this simplification help for explaining the idea.</p>
+                
+                <p>Now, if we want to parse the sentence <em>the captain saw the pilot</em> as an <code>S</code>, the problem can be solved by picking an initial tree rooted at <code>S</code>, which in this case must be the tree for "saw", and then splitting the input in two, and using the left half the parse as an <code>NP</code> because the left non-terminal frontier node for <em>saw</em> is an <code>NP</code>, and using the right half to parse as an <code>NP</code> because the right non-terminal frontier node for <em>saw</em> is also an <code>NP</code>:</p>
+                
+                <p><img src="img4.jpg" /></p>
+                
+                <p>This sets up two sub-problems that have the exact same structure as the whole problem, as shown, and so we can define a nice recursive algorithm like so (using <code>++</code> to indicate concatenation):</p>
+                
+                <pre><code>to parse INPUT as an X, pick a random initial tree T rooted at a node labeled X from INPUT, and split so that INPUT = LEFT ++ [T] ++ RIGHT.
+
+if T has left frontier node L, parse LEFT as L, and if T has right frontier node R, parse RIGHT as R.
+
+if INPUT is empty, this (sub-)parse fails.</code></pre>
+                
+                <p>This is obviously a non-deterministic algorithm, as we might have multiple initial trees in the input that have the desired root label, but only one can be the root, so we have to try them all. There are ways to cut down on the non-determinism by counting frontier nodes, etc. but that's not important right now.</p>
+                
+                <p>The move now to include trees like the "gave" tree, which has multiple non-terminal frontier nodes to the right of the head word is now relatively straight-forward. Instead of just parsing a sequence of initial trees as a label, we also need to be able to parse a sequence of initial trees as a <em>sequence</em> of labels. We can do this by splitting the sequence of initial trees into an appropriate number of subsequences, and then parsing each as the corresponding individual label:</p>
+                
+                <p><img src="img5.jpg" /></p>
+                
+                <p>Again this is non-deterministic, because we could split the sequence of trees up any number of ways, some shown above, and again there are ways to cut down on the non-determinism that we can ignore for now.</p>
+                
+                <h2>Robustness of the Algorithm</h2>
+                
+                <p>This algorithm is somewhat robust. If at any point we cannot find a parse of a (sub-)input for a given goal label, we can wrap that entire input up in an error node in the tree, and pretend that it succeeded. For example, the sentence <em>the captain saw the</em> should fail to find an initial tree labeled with <code>NP</code> for the parse of the object of the verb, so subgoal would fail:</p>
+                
+                <p><img src="img6.jpg" /></p>
+                
+                <p>At that point, its easy enough to wrap it and return the error node, producing the tree</p>
+                
+                <p><img src="img7.jpg" /></p>
+                
+                <p>There will naturally be many failed parses, because of the non-determinism, even after cutting down on it. For example, the sentence "the captain saw the pilot with the hat" will result in the following two parse trees (among others), one of which has an error in it because of an incorrect choice for the direct object:</p>
+                
+                <p><img src="img8.jpg" /></p>
+                
+                <p>These trees can be scored by how many errors they have, or how big the errors are, or whatnot, to pick a most-likely-tree.</p>
+                
+                <p>These trees can <em>also</em> be used with heuristics, including ones derived from machine learning, to try to repair the errors. For instance, the error node in the ungrammatical sentence <em>the captain saw the</em> might strongly predict that there is a missing noun, and that this is the way to correct the error.</p>
+                
+                <h2>Not Robust Enough</h2>
+                
+                <p>Despite being robust to errors, this approach has some flaws. The errorful sentence <em>the captain saw the</em> highlights an interesting problem: if a word is missing, and it's the word that <em>should</em> profit the root node for a (sub-)parse, then there will be a serious problem for that sub parse.</p>
+                
+                <p>If the missing word is the only word with the necessary root for that entire string of input, then none of that input will be parsed at all, and the error node will be fairly uninformative. For instance, suppose we left out the verb as in <em>the captain the pilot with the hat<em>. In this case, there is no candidate initial tree rooted at <code>S</code> so the entire thing is an error node, with no parsing attempted at all.</p>
+                
+                <p>Alternatively, if the missing word isn't the only one with that root label, then the others will be tried as well, and depending on how we score errors, these might score better, even tho a human might not even consider them to be possible parses at all. For instance, here is a parse for the sentence <em>the captain the pilot that met Ivanova</em>, where one verb is missing:</p>
+                
+                <p><img src="img9.jpg" /></p>
+                
+                <p>Notice that the missing first verb produces an error node containing the whole input, but the second verb, mistakenly chosen to be the root in the second and third trees, allows more of the sentence to be parsed.</p>
+                
+                <p>Ideally, we'd like to get error nodes that correspond to human intuitions about where an error is. In all of these examples, a missing word is not perceived by the human reader as justification for some wild alternative parse, but rather its seen precisely as that: a missing word. Our response is not to pick some better parse, but to reply "I think you a word".</p>
+                
+                <p>In the next post in this series, I'll talk about a parsing technique that can successfully handle missing words as such, but which again is not perfectly suited to the task of parsing natural language.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).<!-- Here's <a href="https://news.ycombinator.com/item?id=8756903">the HN thread</a> if you prefer that mode, and also <a href="http://www.reddit.com/r/programming/duplicates/2pgq72/implementing_language_engine_pluralities_in/">the Reddit threads</a>.--></p>
+                
+            </div>
+        </section>
+    </body>
+</html>

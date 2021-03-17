@@ -1,0 +1,409 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Plotkin's <em>Call-By-Name, Call-By-Value and the λ-Calculus</em></title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Plotkin's <em>Call-By-Name, Call-By-Value and the λ-Calculus</em></h1>
+            <div class="content">
+                <p><em>posted by Beka on 4 September 2016</em></p>
+                
+                <p>This post is an attempt to communicate what I've come to understand about Plotkin's paper <em>Call-By-Name, Call-By-Value and the λ-Calculus</em>. In this paper, Plotkin describes the a form of the λ Calculus, together with an abstract machine called the SECD machine, and then describes, partially, how to get from an SECD machine to a continuation passing style implementation in a host λ Calculus. Plotkin addresses the issue that your host language might be lazy (call-by-name) while the language you want to implement is eager (call-by-value), or vice versa, and a naive implementation won't suffice, hence the CPS translation.</p>
+                
+                <p>It took me a little bit to fully understand what was going on with the paper, and it took even longer to understand how to arrive at the translations that Plotkin has. Or to be more accurate, there is an algorithm that can be built relatively quickly from Plotkin's examples, but formulating the reasoning behind why that's the right algorithm isn't clear. So what I'll try to do in this post is show the process that I arrived at. I'll also use a simplification: rather than the SECD machine, I'll use a CEK machine. In fact, just a CK machine, to simplify even further.</p>
+                
+                
+                
+                <h3>The λ Calculus</h3>
+                
+                <p>First, we'll need to define the version of the LC we'll be using in this post. We'll have a type theory in which we have function and pair types, but this generalizes naturally.</p>
+                
+                <pre>Γ ⊢ (M,N) : A × B ; ×I
+  Γ ⊢ M : A
+  Γ ⊢ N : B</pre>
+                
+                <pre>Γ ⊢ fst P : A ; ×E₁
+  Γ ⊢ P : A × B</pre>
+                
+                <pre>Γ ⊢ snd P : B ; ×E₂
+  Γ ⊢ P : A × B</pre>
+  
+                <pre>Γ ⊢ λx.M : A → B ; →I
+  Γ, x : A ⊢ M : B</pre>
+                
+                <pre>Γ ⊢ M N : B ; →E
+  Γ ⊢ M : A → B
+  Γ ⊢ N : A</pre>
+                
+                <p>This LC has the usual β reductions:</p>
+                
+                <pre>fst (M,N) ⇝ M</pre>
+                
+                <pre>snd (M,N) ⇝ N</pre>
+                
+                <pre>(λx.M) N ⇝ [N/x]M</pre>
+                
+                
+                
+                <h3>The CK Machine</h3>
+                
+                <p>The CK Machine (C for Control, K for K(c)ontinuation or K(c)ontext) is a state machine with two states, which we'll fall forward and backward, corresponding to a recursion phase and a return/reduce phase. Each state has two parts, an evaluation context or call stack (depending on how you wish to think about it), and either an expression to compute (in the forward direction) or a return value (in the return/reduce phase). We define these as follows:</p>
+                
+                <pre>Terms: M,N ::= (M,N) | fst M | snd M | λx.M | M N
+Values: U,V ::= (U,V) | λx.M
+Contexts: K ::= • | (K,N) | (V,K) | fst K | snd K | K N | V K
+States:  S ::= K ▷ M | K ◃ V</pre>
+                
+                <p>It helps to think about contexts as being typed as well, so we will define a judgment <span class="code">K :- A > R</span> to mean that <span class="code">K</span> is a context for an <span class="code">A</span>, inside of a computation for an <span class="code">R</span>, as follows:</p>
+                
+                <pre>• :- A > A ;</pre>
+                
+                <pre>(K,N) :- A > R
+  K :- A × B > R
+  ⊢ N : B</pre>
+                
+                <pre>(M,K) :- B > R
+  ⊢ M : A
+  K :- A × B > R</pre>
+                
+                <pre>fst K :- A × B > R
+  K :- A > R</pre>
+                
+                <pre>snd K :- A × B > R
+  K :- B > R</pre>
+                
+                <pre>K N :- A → B > R
+  K :- B > R
+  ⊢ N : A</pre>
+                
+                <pre>M K :- A > R
+  ⊢ M : A → B
+  K : B > R</pre>
+                
+                <p>Additionally, a state computers an <span class="code">R</span> precisely when the context is an <span class="code">R</span>-computing context for an <span class="code">A</span>, and the term/value is of type <span class="code">A</span>:</p>
+                
+                <pre>K ▷ M state R
+  K :- A > R
+  ⊢ M : A</pre>
+                
+                <pre>K ◃ M state R
+  K :- A > R
+  ⊢ M : A</pre>
+                
+                <p>Readers familiar with type theory for classical logic will recognize this as being very similar to the typing rules for refutations, as classical logic is a more general form of type theory for CK machines.</p>
+                
+                <p>Eager computation with the CK machine proceeds by iterated stepping defined as follows:</p>
+                
+                <pre>K ▷ (M,N)  ↦  (K,N) ▷ M
+(K,N) ◃ M'  ↦  (M',K) ▷ N
+(M',K) ◃ N'  ↦  K ◃ (M',N')
+
+K ▷ fst P  ↦  fst K ▷ P
+fst K ◃ (M',N')  ↦  K ◃ M'
+
+K ▷ snd P  ↦  snd K ▷ P
+snd K ◃ (M',N')  ↦  K ◃ N'
+
+K ▷ λx.M  ↦  K ◃ λx.M
+
+K ▷ M N  ↦  K N ▷ M
+K N ◃ M'  ↦  M' K ▷ N
+(λx.M') K ◃ N'  ↦  K ▷ [N'/x]M'</pre>
+                
+                <p>Additionally, lazy computation with the CK machine proceeds by iterated stepping defined as follows:</p>
+                
+                <pre>K ▷ (M,N)  ↦  K ◃ (M,N)
+
+K ▷ fst P  ↦  fst K ▷ P
+fst K ◃ (M,N)  ↦  K ▷ M
+
+K ▷ snd P  ↦  snd K ▷ P
+snd K ◃ (M',N')  ↦  K ◃ N'
+
+K ▷ λx.M  ↦  K ◃ λx.M
+
+K ▷ M N  ↦  K N ▷ M
+K N ◃ (λx.M')  ↦  K ▷ [N/x]M'</pre>
+                
+                <p>That is to say, lazy computation doesn't compute under pairs, and doesn't compute on arguments, during the recursive phase</p>
+                
+                <p>We start a CK machine running on a program <span class="code">M</span> with the initial state <span class="code">• ▷ M</span>, and it's done when it returns to the empty stack, i.e. when it's in the state <span class="code">• ◃ M'</span> for some value <span class="code">M'</span>.</p>
+                
+                
+                
+                
+                <h3>Interpreting CK Machines</h3>
+                
+                <p>Taking the above definitions to be a kind of syntactic representation, we can think of an evaluator defined in our host language, which converts the syntactic representations into their equivalent form in the host language. If, for instance, our host language is Haskell, we can define a function that evaluates terms by recursively evaluating and applying. Doing this will make the implemented language identical to the host language (in this case Haskell) in terms of being eager or lazy.</p>
+                
+                <p>Alternatively, we can implement the <em>state machine</em> via it's transitions, and we would instead get an eager or lazy, despite Haskell being lazy, simply in virtue of what the specified next states are, rather than relying on Haskell's own evaluation semantics to evaluate pairs and functions.</p>
+                
+                <p>However, the state machine is defined on the syntax, we're not translating into the host language's own terms. The implemented pairs don't become Haskell pairs, nor implemented functions Haskell functions. They're just some elements of a term type. This is distinct from the evaluation function we could define, which would genuinely turn implemented pairs into Haskell pairs, etc.</p>
+                
+                <p>But, using the state machine as a basis, we <em>can</em> define a translation into the host language that has the desired eager or lazy evaluation. We do this by drawing on Conal Elliot's denotational design approach, viewing the host language programs as denotations, and demanding that when we translate, we use a homomorphism. That is to say, we'll define a collection of functions that preserve the structure of states, contexts, terms, and values, when translating into the host language.</p>
+                
+                <p>First we'll define translations of terms. Given some term <span class="code">M : A</span>, we want to give <span class="code">tm M : Tm A</span>, where <span class="code">Tm A</span> is some translation of the type.</p>
+                
+                <pre><code>tm x = variableTm x
+tm (M,N) = pairTm (tm M) (tm N)
+tm (fst P) = firstTm (tm P)
+tm (snd P) = secondTm (tm P
+tm (λx.M) = lambdaTm (λx. tm M)
+tm (M N) = applyTm (tm M) (tm N)</code></pre>
+                
+                <p>This translation relies on six currently undefined functions that will translate each respective sort of thing. We will have to chose how to define this type level translation later as well. We leave it unspecified for now, but we will state the typing relations we expect to hold amongst them:</p>
+                
+                <pre><code>If  x : A  then  variableTm x : Tm A
+If  M : Tm A  and  N : Tm B  then  pairTm M N : Tm (A × B)
+If  P : Tm (A × B)  then  fstTm P : Tm A
+If  P : Tm (A × B)  then  sndTm P : Tm B
+If  F : Val A → Tm B  then  lambdaTm F : Tm (A → B)
+If  M : Tm (A → B)  and  N : Tm A  then  applyTm M N : Tm B</code></pre>
+                
+                <p>Next, we define a translation on values. If <span class="code">M' : A</span>, then <span class="code">val M' : Val A</span>, defined as</p>
+                
+                <pre><code>val (M',N') = pairVal (val M') (val N')
+val (λx.M) = lambdaVal (λx. tm M)</code></pre>
+                
+                <p>Again we have to define the interpretation of types, and the auxiliary functions, which we'll come back to, but the typing relations for them are</p>
+                
+                <pre><code>If  M' : Val A  and  N' : Val B  then  pairVal M' N' : Val (A × B)
+If  F : Val A → Tm B  then  lambdaVal F : Val (A → B)</code></pre>
+                
+                <p>Next, translating contexts. Given a context <span class="code">K :- A > R</span> we expect to translate that into some <span class="code">ctx K : Ctx A R</span>, for some choice of types for the context's translation. We define it similar to the definitions for terms:</p>
+                
+                <pre><code>ctx • = done
+ctx (K,N) = pairLCtx (ctx K) (tm N)
+ctx (M',K) = pairRCtx (val M') (ctx K)
+ctx (fst K) = fstCtx (ctx K)
+ctx (snd K) = sndCtx (ctx K)
+ctx (K N) = appLCtx (ctx K) (tm N)
+ctx (M' K) = appRCtx (val M') (ctx K)</code></pre>
+                
+                <p>The typing relations for contexts are obvious given the relations for terms and values:</p>
+                
+                <pre><code>done : Ctx A A
+If  K : Ctx (A × B) R  and  N : Tm B  then  pairLCtx K N : Ctx A R
+If  M' : Val A  and  K : Ctx (A × B) R  then  pairRCtx M' K : Ctx B R
+If  K : Ctx A R  then  fstCtx K : Ctx (A × B) R
+If  K : Ctx B R  then  sndCtx K : Ctx (A × B) R
+If  K : Ctx B R  and  N : Tm A  then  appLCtx K N : Ctx (A → B) R
+If  M' : Val (A → B)  and  K : Ctx B R  then  appRCtx M' K : Ctx A R</code></pre>
+                
+                <p>And finally we'll translate machine states, so given a state <span class="code">S state R</span>, we'll have <span class="code">st S : Val R</span>:</p>
+                
+                <pre><code>st (K ▷ M) = forward (ctx K) (tm M)
+st (K ◃ M') = backward (ctx K) (val M')</code></pre>
+                
+                <p>Which obviously should obey the typing relations</p>
+                
+                <pre><code>If  K : Ctx A R  and  M : Tm A  then  forward K M : Val R
+If  K : Ctx A R  and  M' : Val A  then  backward K M' : Val R</code></pre>
+                
+                <p>Again, we haven't yet defined any of these auxiliary functions/values, but we know what the typing relations are that have to hold and so that gives us some guidance.</p>
+                
+                
+                
+                
+                <h3>Translations Preserve Execution</h3>
+                
+                <p>The main guiding principle for how we will proceed now is that we want the translations of states to preserve the behavior of the states. That is to say, if <span class="code">S ↦* S'</span> then <span class="code">st S ⇝* st S'</span>. Or to put it another way, if a state <span class="code">S</span> steps some number of times to <span class="code">S'</span>, then the translation <span class="code">st S</span> computes <em>in the host language</em> to <span class="code">st S'</span>. This provides a substantial constraint on the possible definitions of the auxiliary functions and type translations now.</p>
+                
+                <p>In particular, we have two major choices. The first is to translate things into some concrete data type, except for states, which would perform some pattern matching computation on the concrete data. For example, we could use the trivial translation turning terms, values, and contexts into themselves, and then executing the state machine.</p>
+                
+                <p>The other choice is to translate things into some use of function types, and use function reduction instead pattern matching as the computation in the host language. We will use the second choice.</p>
+                
+                <p>Having decided then that computation of <span class="code">forward K M</span> and <span class="code">backward K M'</span> is done by function reduction, we have slightly less than three choices: either the contexts are functions that take terms as arguments, or terms are functions that take contexts as arguments. We don't have a choice about whether or not contexts take values as arguments, however. Since the entire thing must return a value, we cannot chose values to be functions from contexts to values. Instead, it must be that contexts are functions from values to values. This induces more constraints: either terms and values are interpreted the same (if terms are arguments to contexts) or terms are functions from contexts (i.e. functions from values to values) to values. Using Haskell type notation:</p>
+                
+                <pre><code>Either  Tm A = Val A  and  Ctx A R = Val A -> Val R
+Or  Tm A = (Val A -> Val R) -> Val R  and  Ctx A R = Val A -> Val R</code></pre>
+                
+                <p>The first choice can be ruled out as follows: if the only function types involved are contexts, then all behavior is determined by the context. But the state machine's forward direction is determined by the nature of the term not the context. Therefore, contexts cannot be the only function types involved. So we must pick the second option.</p>
+                
+                <p>We now can state the definitions of <span class="code">forward</span> and <span class="code">backward</span>:</p>
+                
+                <pre><code>forward K M = M K
+backward K M' = K M'</code></pre>
+                
+                <p>That is to say, in the forward direction, the translation of the term (M) takes the translation of the context (K) as argument, while in the backward direction, the translation of the context (K) takes the translation of the value (M') as argument.</p>
+                
+                <p>Now we can pick a representation for values that's straight forwardly in terms of host language programs:</p>
+                
+                <pre><code>Val (A × B) = Val A × Val B
+Val (A → B) = Val A → Tm B</code></pre>
+                
+                <p>This together with the typing relation we expect to hold gives us obvious definitions for the value auxiliary functions:</p>
+                
+                <pre><code>pairVal M N = (M,N)
+lambdaVal F = F</code></pre>
+                
+                <p>We can now look at the statements that define how the CK machine steps, and look at what host language computations that induces. In the case of the recursive steps for pairs, we have</p>
+                
+                <pre><code>K ▷ (M,N) ↦ (K,N) ▷ M
+
+therefore
+
+pairTm (tm M) (tm N) (ctx K) ⇝* tm M (pairLCtx (ctx K) (tm N))</code></pre>
+                
+                <p>If we now ask how to define <span class="code">pairTm</span> so that this computation holds, there's one obvious way: simply define it as a function that directly reduces to this:</p>
+                
+                <pre><code>pairTm M N = λk. M (pairLCtx K N)</code></pre>
+                
+                <p>We have to still define <span class="code">pairLCtx</span> before we have a full definition for <span class="code">pairTm</span>, but we're closer. Let's now look at the next machine step for pairs:</p>
+                
+                <pre><code>(K,N) ◃ M' ↦ (M',K) ▷ N
+
+therefore
+
+pairLCtx (ctx K) (tm N) (val M') ⇝* tm N (pairRCtx (val M') (ctx K))</code></pre>
+                
+                <p>We can again use this to directly define <span class="code">pairLCtx</span> as an obvious function:</p>
+                
+                <pre><code>pairLCtx K N = λm'. N (pairRCtx m' K)</code></pre>
+                
+                <p>The next step for pairs gives us</p>
+                
+                <pre><code>(M',K) ◃ N' ↦ K ◃ (M',N')
+
+therefore
+
+pairRCtx (val M') (ctx K) (val N') ⇝* K (M',N')</code></pre>
+                
+                <p>We can now define <span class="code">pairRCtx</span>:</p>
+                
+                <pre><code>pairRCtx M' K = λn'. K (M',n')</code></pre>
+                
+                <p>Unfolding these definitions, we find</p>
+                
+                <pre><code>pairTm M N = λk. M (λm'. N (λn'. k (m',n')))</code></pre>
+                
+                <p>Which is precisely the definition of a CPS transformed pair constructor.</p>
+                
+                <p>We also have the recursive and computation steps for <span class="code">fst</span>:</p>
+                
+                <pre><code>K ▷ fst P ↦ fst K ▷ P
+
+therefore
+
+fstTm (tm P) (ctx K) ⇝* tm P (fstCtx (ctx K))</code></pre>
+                
+                <p>Which gives the definition</p>
+                
+                <pre><code>fstTm P = λk. P (fstCtx K)</code></pre>
+                
+                <p>And the computation step</p>
+                
+                <pre><code>fst K ◃ (M',N') ↦ K ◃ M'
+
+therefore
+
+fstCtx (ctx K) (val M', val N') ⇝* K M'</code></pre>
+                
+                <p>Which gives us the definition</p>
+                
+                <pre><code>fstCtx K = λp'. K (fst p')</code></pre>
+                
+                <p>Together, this tells us</p>
+                
+                <pre><code>fstTm P = λk. P (λp'. K (fst p'))</code></pre>
+                
+                <p>Similarly for <span class="code">snd</span> we have the recursive step</p>
+                
+                <pre><code>K ▷ snd P ↦ snd P ▷ P
+
+therefore
+
+sndTm (tm P) (ctx K) ⇝* tm P (sndCtx (ctx K))</code></pre>
+                
+                <p>Giving the definition</p>
+                
+                <pre><code>sndTm P = λk. P (sndCtx k)</code></pre>
+                
+                <p>And the computation step</p>
+                
+                <pre><code>snd K ◃ (M',N') ↦ K ◃ N'
+
+therefore
+
+sndCtx (ctx K) (val M', val N') ⇝* K N'</code></pre>
+                
+                <p>Which gives us the definition</p>
+                
+                <pre><code>sndCtx K = λp'. K (snd p')</code></pre>
+                
+                <p>And together these two give us</p>
+                
+                <pre><code>sndTm P = λk. P (λp'. K (snd p'))</code></pre>
+                
+                <p>We now have the full, eager CPS transformed interpretation of the pairs of the STLC, derived directly from the CK machine steps, under the constraint that host language computation follows the machine steps. Let's do the same for functions.</p>
+                
+                <pre><code>K ▷ λx.M ↦ K ◃ λx.M
+
+therefore
+
+lambdaTm (λx. tm M) (ctx K) ⇝* ctx K (λx. tm M)</code></pre>
+                
+                <p>Which gives us the definition</p>
+                
+                <pre><code>lambdaTm F = λk. k F</code></pre>
+                
+                <p>And now the first application step:</p>
+                
+                <pre><code>K ▷ M N ↦ K N ▷ M
+
+therefore
+
+appTm (tm M) (tm N) (ctx K) ⇝* tm M (appLCtx (ctx K) (tm N))</code></pre>
+                
+                <p>Which gives the definition</p>
+                
+                <pre><code>appTm M N = λk. M (appLCtx K N)</code></pre>
+                
+                <p>The second application step:</p>
+                
+                <pre><code>K N ◃ λx.M' ↦ (λx.M') K ▷ N
+
+therefore
+
+appLCtx (ctx K) (tm N) M' ⇝ tm N (appCtxR M' (ctx K))</code></pre>
+                
+                <p>Giving the definition</p>
+                
+                <pre><code>appLCtx K N = λf'. N (appCtxR f' K)</code></pre>
+                
+                <p>And finally the computation step</p>
+                
+                <pre><code>(λx.M') K ◃ N' ↦ K ▷ [N'/x]M'
+
+therefore
+
+appCtxR (val M') (ctx K) (val N') ⇝* val M' (val N') (ctx K)</code></pre>
+                
+                <p>Giving the definition</p>
+                
+                <pre><code>appCtxR M' K = λn'. M' n' K</code></pre>
+                
+                <p>Together with the previous steps, we have</p>
+                
+                <pre><code>appTm M N = λk. M (λm'. N (λn'. m' n' k))</code></pre>
+                
+                <p>We now have, again, the standard CPS translation for eager evaluation, this time for functions, derived straight from the CK machine.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).</p>
+            </div>
+        </section>
+    </body>
+</html>

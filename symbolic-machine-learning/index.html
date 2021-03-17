@@ -1,0 +1,341 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Symbolic Machine Learning</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Symbolic Machine Learning</h1>
+            <div class="content">
+                <p><em>posted by Beka on 10 December 2016</em></p>
+                
+                <p>This post aims to provide a unifying approach to symbolic and non-symbolic techniques of artificial intelligence. Historically, symbolic techniques have been very desirable for representing richly structured domains of knowledge, but have had little impact on machine learning because of a lack of generally applicable techniques. Conversely, machine learning techniques tend to be highly numeric in nature, thus restricting their application domain, but within those domains they have excelled. This post outlines a general approach to representing symbolic problems that is completely amenable to non-symbolic techniques such as deep learning, bridging the gap once and for all. The application domains are quite extensive: from traditional symbolic AI problems such as theorem proving, robotic planning, program synthesis, inductive programming, natural language understanding, natural language generation, and game playing, to less traditional tasks such as chemical synthesis design, program refactoring, and fuzzy matching of symbolic data. This post provides overviews of how these tasks can be done in this framework. For the vast majority of these tasks, the solutions also constitute glass boxes: they are understandable rather than being black boxes.</p>
+                
+                <p>This blog post is a synthesis of various ideas. The first is the idea to use graph representations for symbolic propositions, originating partially out of Martin Kay's work in natural language generation, but also in Neo-Davidsonian semantics and Minimal Recursion Semantics. The second is work by Rogers and Hahn on chemical fingerprints, by way of Unterthiner et al.'s work on toxicity prediction using deep learning. These two combined give the symbolic vector representations described below. The third is game playing techniques developed in recent years, which extend very well to problems in the symbolic domain.</p>
+                
+                <h3>From Symbolic Data to Graphs</h3>
+                
+                <p>Symbolic data can be thought of as abstract syntax trees, and consequently as graphs. For example, the symbolic data <span class="code">Foo (Bar Baz) (Quux Doo Garply)</span>, which might be an element of some Haskell data type, for example, can be seen as the tree</p>
+                
+                <!--
+digraph G {
+  foo [ label = "Foo" ];
+  bar [ label = "Bar" ];
+  baz [ label = "Baz" ];
+  quux [ label = "Quux" ];
+  doo [ label = "Doo" ];
+  garply [ label = "Garply" ];
+  foo -> bar [ arrowhead = none ];
+  foo -> quux [ arrowhead = none ];
+  bar -> baz [ arrowhead = none ];
+  quux -> doo [ arrowhead = none ];
+  quux -> garply [ arrowhead = none ];
+}
+                -->
+                <p><svg width="231pt" height="188pt" viewBox="0.00 0.00 231.00 188.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph1" class="graph" transform="scale(1 1) rotate(0) translate(4 184)">
+<title>G</title>
+<polygon fill="white" stroke="white" points="-4,5 -4,-184 228,-184 228,5 -4,5"></polygon>
+<!-- foo -->
+<g id="node1" class="node"><title>foo</title>
+<ellipse fill="none" stroke="black" cx="65" cy="-162" rx="27" ry="18"></ellipse>
+<text text-anchor="middle" x="65" y="-157.8" font-family="Times,serif" font-size="14.00">Foo</text>
+</g>
+<!-- bar -->
+<g id="node2" class="node"><title>bar</title>
+<ellipse fill="none" stroke="black" cx="27" cy="-90" rx="27" ry="18"></ellipse>
+<text text-anchor="middle" x="27" y="-85.8" font-family="Times,serif" font-size="14.00">Bar</text>
+</g>
+<!-- foo&#45;&gt;bar -->
+<g id="edge2" class="edge"><title>foo-&gt;bar</title>
+<path fill="none" stroke="black" d="M56.1865,-144.765C50.0475,-133.456 41.8942,-118.437 35.7657,-107.147"></path>
+</g>
+<!-- quux -->
+<g id="node4" class="node"><title>quux</title>
+<ellipse fill="none" stroke="black" cx="104" cy="-90" rx="32.24" ry="18"></ellipse>
+<text text-anchor="middle" x="104" y="-85.8" font-family="Times,serif" font-size="14.00">Quux</text>
+</g>
+<!-- foo&#45;&gt;quux -->
+<g id="edge4" class="edge"><title>foo-&gt;quux</title>
+<path fill="none" stroke="black" d="M74.0454,-144.765C80.2559,-133.618 88.4752,-118.865 94.7328,-107.633"></path>
+</g>
+<!-- baz -->
+<g id="node3" class="node"><title>baz</title>
+<ellipse fill="none" stroke="black" cx="27" cy="-18" rx="27" ry="18"></ellipse>
+<text text-anchor="middle" x="27" y="-13.8" font-family="Times,serif" font-size="14.00">Baz</text>
+</g>
+<!-- bar&#45;&gt;baz -->
+<g id="edge6" class="edge"><title>bar-&gt;baz</title>
+<path fill="none" stroke="black" d="M27,-71.6966C27,-60.8463 27,-46.9167 27,-36.1043"></path>
+</g>
+<!-- doo -->
+<g id="node5" class="node"><title>doo</title>
+<ellipse fill="none" stroke="black" cx="102" cy="-18" rx="27.4962" ry="18"></ellipse>
+<text text-anchor="middle" x="102" y="-13.8" font-family="Times,serif" font-size="14.00">Doo</text>
+</g>
+<!-- quux&#45;&gt;doo -->
+<g id="edge8" class="edge"><title>quux-&gt;doo</title>
+<path fill="none" stroke="black" d="M103.506,-71.6966C103.196,-60.8463 102.798,-46.9167 102.489,-36.1043"></path>
+</g>
+<!-- garply -->
+<g id="node6" class="node"><title>garply</title>
+<ellipse fill="none" stroke="black" cx="186" cy="-18" rx="37.2772" ry="18"></ellipse>
+<text text-anchor="middle" x="186" y="-13.8" font-family="Times,serif" font-size="14.00">Garply</text>
+</g>
+<!-- quux&#45;&gt;garply -->
+<g id="edge10" class="edge"><title>quux-&gt;garply</title>
+<path fill="none" stroke="black" d="M120.99,-74.496C134.876,-62.6424 154.434,-45.9462 168.466,-33.9684"></path>
+</g>
+</g>
+</svg></p>
+                
+                <p>This tree can then be translated into a graph that has labeled nodes and labeled directed edges, namely</p>
+                
+                <!--
+digraph G {
+  foo [ label = "Foo" ];
+  bar [ label = "Bar" ];
+  baz [ label = "Baz" ];
+  quux [ label = "Quux" ];
+  doo [ label = "Doo" ];
+  garply [ label = "Garply" ];
+  foo -> bar [ label = "arg0" ];
+  foo -> quux [ label = "arg1" ];
+  bar -> baz [ label = "arg0" ];
+  quux -> doo [ label = "arg0" ];
+  quux -> garply [ label = "arg1" ];
+}
+                -->
+                
+                <p><div id="graphviz_svg_div"><!--?xml version="1.0" encoding="UTF-8" standalone="no"?-->
+
+<!-- Generated by graphviz version 2.28.0 (20110507.0327)
+ -->
+<!-- Title: G Pages: 1 -->
+<svg width="231pt" height="224pt" viewBox="0.00 0.00 231.00 224.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph1" class="graph" transform="scale(1 1) rotate(0) translate(4 220)">
+<title>G</title>
+<polygon fill="white" stroke="white" points="-4,5 -4,-220 228,-220 228,5 -4,5"></polygon>
+<!-- foo -->
+<g id="node1" class="node"><title>foo</title>
+<ellipse fill="none" stroke="black" cx="68" cy="-198" rx="27" ry="18"></ellipse>
+<text text-anchor="middle" x="68" y="-193.8" font-family="Times,serif" font-size="14.00">Foo</text>
+</g>
+<!-- bar -->
+<g id="node2" class="node"><title>bar</title>
+<ellipse fill="none" stroke="black" cx="27" cy="-108" rx="27" ry="18"></ellipse>
+<text text-anchor="middle" x="27" y="-103.8" font-family="Times,serif" font-size="14.00">Bar</text>
+</g>
+<!-- foo&#45;&gt;bar -->
+<g id="edge2" class="edge"><title>foo-&gt;bar</title>
+<path fill="none" stroke="black" d="M60.2882,-180.448C54.2752,-167.542 45.8182,-149.39 38.9331,-134.613"></path>
+<polygon fill="black" stroke="black" points="42.073,-133.064 34.6772,-125.478 35.7279,-136.021 42.073,-133.064"></polygon>
+<text text-anchor="middle" x="64.4376" y="-148.8" font-family="Times,serif" font-size="14.00">arg0</text>
+</g>
+<!-- quux -->
+<g id="node4" class="node"><title>quux</title>
+<ellipse fill="none" stroke="black" cx="104" cy="-108" rx="32.24" ry="18"></ellipse>
+<text text-anchor="middle" x="104" y="-103.8" font-family="Times,serif" font-size="14.00">Quux</text>
+</g>
+<!-- foo&#45;&gt;quux -->
+<g id="edge4" class="edge"><title>foo-&gt;quux</title>
+<path fill="none" stroke="black" d="M74.7713,-180.448C79.9677,-167.746 87.2427,-149.962 93.2347,-135.315"></path>
+<polygon fill="black" stroke="black" points="96.5897,-136.358 97.1366,-125.777 90.1108,-133.707 96.5897,-136.358"></polygon>
+<text text-anchor="middle" x="102.438" y="-148.8" font-family="Times,serif" font-size="14.00">arg1</text>
+</g>
+<!-- baz -->
+<g id="node3" class="node"><title>baz</title>
+<ellipse fill="none" stroke="black" cx="27" cy="-18" rx="27" ry="18"></ellipse>
+<text text-anchor="middle" x="27" y="-13.8" font-family="Times,serif" font-size="14.00">Baz</text>
+</g>
+<!-- bar&#45;&gt;baz -->
+<g id="edge6" class="edge"><title>bar-&gt;baz</title>
+<path fill="none" stroke="black" d="M27,-89.614C27,-77.2403 27,-60.3686 27,-46.2198"></path>
+<polygon fill="black" stroke="black" points="30.5001,-46.0504 27,-36.0504 23.5001,-46.0504 30.5001,-46.0504"></polygon>
+<text text-anchor="middle" x="39.4376" y="-58.8" font-family="Times,serif" font-size="14.00">arg0</text>
+</g>
+<!-- doo -->
+<g id="node5" class="node"><title>doo</title>
+<ellipse fill="none" stroke="black" cx="102" cy="-18" rx="27.4962" ry="18"></ellipse>
+<text text-anchor="middle" x="102" y="-13.8" font-family="Times,serif" font-size="14.00">Doo</text>
+</g>
+<!-- quux&#45;&gt;doo -->
+<g id="edge8" class="edge"><title>quux-&gt;doo</title>
+<path fill="none" stroke="black" d="M103.605,-89.614C103.324,-77.2403 102.94,-60.3686 102.619,-46.2198"></path>
+<polygon fill="black" stroke="black" points="106.114,-45.9683 102.388,-36.0504 99.1157,-46.1274 106.114,-45.9683"></polygon>
+<text text-anchor="middle" x="116.438" y="-58.8" font-family="Times,serif" font-size="14.00">arg0</text>
+</g>
+<!-- garply -->
+<g id="node6" class="node"><title>garply</title>
+<ellipse fill="none" stroke="black" cx="186" cy="-18" rx="37.2772" ry="18"></ellipse>
+<text text-anchor="middle" x="186" y="-13.8" font-family="Times,serif" font-size="14.00">Garply</text>
+</g>
+<!-- quux&#45;&gt;garply -->
+<g id="edge10" class="edge"><title>quux-&gt;garply</title>
+<path fill="none" stroke="black" d="M118.283,-91.6716C130.943,-78.085 149.623,-58.0383 164.159,-42.4394"></path>
+<polygon fill="black" stroke="black" points="167.072,-44.4475 171.328,-34.7453 161.95,-39.6754 167.072,-44.4475"></polygon>
+<text text-anchor="middle" x="165.438" y="-58.8" font-family="Times,serif" font-size="14.00">arg1</text>
+</g>
+</g>
+</svg>
+</div></p>
+                
+                <p>Notice we're using edge labels that are of the form <span class="code">argn</span> for some n. We might alternatively want to use the label of the source node in place of <span class="code">arg</span>, though it adds no extra information than we already have from knowing that label, so we use the generic version instead.</p>
+                
+                <p>An important special case of symbolic data is binders. In general, symbolic data will be like the above, but representing variable binding is a place where the translation can be improved. There are two usual approaches to representing variable binding: real names, and de Bruijn indices. For example, the lambda term <span class="code">λx.λy.x</span> could be represented as <span class="code">Lambda "x" (Lambda "y" (Variable "x"))</span> using real names, or as <span class="code">Lambda (Lambda (Variable 1))</span> using de Bruijn indices. Translating these into graphs is straight forward, but this isn't necessarily what we want to do.</p>
+                
+                <p>When using real names, a lambda node that has the name "x" and a variable node that has the name "x" are not guaranteed to be related to one another, because the name might be used in multiple places, for example, in the pair of functions <span class="code">〈λx.x, λx.x〉</span>. Of course, we could employ some kind of name convention that says we only ever use a name with only one binder, but this is inelegant.</p>
+                
+                <p>When using de Bruijn indices, a lambda node doesn't specify what variable it binds at all, variables instead count how many binders "up" in the tree their binder is located, and so neither lambdas nor variables in isolation or even together can tell you whether they're related. It requires the full path from the binder to the variable, and moreover requires some math/counting, to establish a relationship between a lambda and a variable.</p>
+                
+                <p>The whole point of real names and de Bruijn indices is precisely to establish a relationship between variables and their binders in <em>trees</em>, because we can't just draw a line from the variable to its binder to indicate the relationship. <em>But in graphs we can!</em> In a graph representation of binders, we don't need to use real names or de Bruijn indices at all, we can simply make the lambda node point to the variable node. Therefore we can represent <span class="code">λx.λy.x</span> by the graph</p>
+                
+                !!! A GRAPH
+                
+                <p>and similarly we can represent the pair <span class="code">〈λx.x, λx.x〉</span> by</p>
+                
+                !!! A GRAPH
+                
+                <p>with no mention of real names or de Bruijn indices, there's no ambiguity about which lambda binds which variable, <em>and the relationship between them is directly via a subgraph</em>. This means that these long-distance relationships between binders and variables become simple local relations in the graph representation, which is much cleaner and simpler.</p>
+                
+                <p>For a more complete example, consider the symbolic proposition <span class="code">∀x. ∃y. P x ∧ (Q y ∨ R x y)</span>, which would become the graph</p>
+                
+                !!! A GRAPH
+                
+                <h3>From Graphs to Symbolic Vectors</h3>
+                
+                <p>With this translation into graphs in mind, we can now make a crucial observation: for any fixed set of node labels NL and edge labels EL, and for any natural number k, there is a finite number of graphs you can make with k nodes using those labels, ignoring whether or not these graphs correspond to complete pieces of symbolic data. For example, if you have k = 1, there are |NL| number of graphs, each of which consists of a single node with some label. If k = 2, then there are |NL|<sup>2</sup>(|EL| + 1) graphs, consisting of two labeled nodes with an optional edge. By extension, there is also a finite (but somewhat larger) number of graphs with at most k nodes, and so we can enumerate them all.</p>
+                
+                <p>Using such an enumeration, we can then ask, for any given piece of symbolic data represented in graph form, how many times does each graph in the enumeration occur as a subgraph of the symbolic data. This produces a vector of counts which can be used to characterize the symbolic data.</p>
+                
+                <p>This representation is lossy, however. For any fixed k, there will always be some cases where two different pieces of symbolic data are mapped to the same symbolic vector. This non-isomorphism may have undesirable effects in the relevant size ranges under consideration, so the choice of k would need to be increased until undesirable amounts of lossiness are eliminated.</p>
+                
+                <h3>Test Case 1: Symbolic Fuzzy Matching</h3>
+                
+                <p>In this test case, we'll look at how well the symbolic vector representation works as a means of performing a fuzzy match on between pieces of symbolic data. We'll use Hoogle as a starting point.</p>
+                
+                <p><a href="https://www.haskell.org/hoogle/">Hoogle</a> is a search engine for the Haskell package repository Hackage, which permits searching by type. For example, the user can search for the type <span class="code">(a -&gt; b) -&gt; [a] -&gt; [b]</span> and Hoogle will find the <span class="code">map</span> function, which has precisely that type, as well as other functions such as <span class="code">fmap</span> which has the similar type <span class="code">Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b</span>, and the function <span class="code">(&lt;*&gt;)</span> which has the type <span class="code">Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b</span>. These are all pretty similar types, having much in common. Hoogle performs a kind of fuzzy matching on these types already, as can be seen, so it would be interesting to compare the symbolic vector technique to Hoogle's own performance.</p>
+                
+                <p>The first thing we'll do is establish the right set of labels for this task. As a first pass, we can try a simple label set consisting of syntactic constructs as node labels and the node labels affixed with argument number as edge labels. This would be the basic technique outlined above. For the names of type constructors, we'll assume that there's a finite number, namely those in our database, rather than having an open-ended set.</p>
+                
+                <p>...</p>
+                
+                <p>One extension of this approach would be to add an additional edge label that represent arguments generically. That is to say, rather than just having edges that indicate particular arguments of particular constructions (e.g. the first argument of a function type node), we'll also have an edge that represents argumenthood independent of which number argument and which type of node.</p>
+                
+                <p>...</p>
+                
+                <p>We'll further modify this system by adding the reflexive transitive closure of the argumenthood label (i.e. representing 0-or-more length paths alone argument edges). This represents a containment relation, and makes it possible to view types such as <span class="code">a</span>, <span class="code">f a</span>, and <span class="code">f (g a)</span> as similar (in that they all involve <span class="code">a</span> in some way).</p>
+                
+                <p>...</p>
+                
+                <h3>Test Case 2: Program Refactoring</h3>
+                
+                <p>In this test case, we'll look at how well the symbolic vector representation works as a means of detecting common program patterns for use as a basis for refactoring. The language we'll use to experiment with this is a version of the Simply Typed Lambda Calculus. To begin with, we'll try this technique on a handful of hand-crafted examples, to see if the technique looks viable at all, and then we'll try it on the full Hoogle database of programs to see what proposed refactorings it can identify.</p>
+                
+                <p>...</p>
+                
+                <h3>Test Case 3: Syntax-based Word Analogies</h3>
+                
+                <p>...</p>
+                
+                <h3>Outline of Future Applications</h3>
+                
+                <p>Below are included some outlines of future application domains. In particular, we discuss the various domains mentioned in the introduction. These are only outlines, though, because they're somewhat more difficult to implement than the above test cases. Either they require a lot of thought, time, and/or effort for reasons external to the machine learning portion, or they require lots of training data that does't currently exist.</p>
+                
+                <p>One thing I do make note of below, however, is whether the domain in question has an extrinsic, formal concept of correctness which can be used to generate training data. This has been very useful in machine learning, especially for games and robotic control, because it means the quality of the resulting system is not limited by uncontrollable factors such as how much corpus data exists and has been adequately marked up. There is, for example, no useful quantity of naturally produced Go game training data, but for the game has fixed inputs and well-defined win conditions, so we can simply play lots of (decreasingly) random games to generate new data and thereby get out Alpha Go which can beat world champions. Some of the domains below fit into this model, and are therefore the low hanging fruit of experimentation.</p>
+                
+                <p><em>Game Playing</em></p>
+                
+                <p>Game playing with machine learning techniques are a good starting point for discussing future applications because these techniques can be generalized to many of the other domains.</p>
+                
+                <p>Currently, there are many game playing systems that use feature vectors that encode game state as the input to machine learning algorithms. The algorithms act are classifiers of the input vectors. It's not immediately obvious how you can use this to play games, but the principle is simple: the overwhelming majority of games have an effectively finite number of inputs that can be used to control the game (e.g. mouse buttons, keyboard buttons, gamepad buttons), so we can classify any given game state by which input is best for that game state. We transform the problem of playing a game into the problem of answering questions like "should I press 'jump' right now?"</p>
+                
+                <p>Currently, the way game state is modeled is relatively direct. For games like Chess or Go or other similar games, we can model it simply by taking the vector's indices to be the board positions, and the value at an index is the game piece at that position. A Go board, for instance, is just a vector of length 361 (19×19 board spaces) with 3 possible values for each: black, white, and unoccupied. Chess similarly has a 64 long vector (8×8 board spaces) with 17 values: 16 pieces and unoccupied. Other games, such as Super Mario Bros., are represented by the actual image input for the game.</p>
+                
+                <p>The symbolic approach outlined above makes it possible to represent game states in a much richer fashion. For games such as Go or Chess, probably no real change is necessary or even possible, but for games like Super Mario Bros., we can represent the state of a game by a large set of propositions that describe the game in useful ways. For instance, we might want to represent spatial relationships (above, below, in front of, behind, etc.), movement relationships (towards, away from), actions (jumping, crouching), and so forth. We might even want to represent more complicated event structures, such as running towards things or jumping over things, which involves multiple things related in complex ways.</p>
+                
+                <p>For example, if Mario is jumping over a pipe and a Piranha Plant is coming out of the pipe, we might represent that as the set of propositions <span class="code">jumping(mario), over(mario,pipe_12), coming_out_of(piranha_plant_3,pipe_12)</span>, taking the conjunction to be implicit and irrelevant to the detail of the meaning. This can obviously then be translated into a graph, like so:</p>
+                
+                !!! A GRAPH
+                
+                <p>The graph is then convertible to a symbolic vector as described above, and we get now use this as input to the classification algorithm to decide what move is best to make.</p>
+                
+                <p>A further refinement of game playing can be made using techniques from robotic planning described below, treating the player character as a robot. Additionally, we can use the natural language generation techniques described below to improve the conversation component of many modern games, possibly producing real, non-trivial, non-scripted conversations, which have so far been impossible.</p>
+                
+                <p>Since games have win conditions that are defined externally, we can automatically generate training data by playing huge numbers of games, using the same standard techniques currently in use. The only major difference is that we need sufficient access to the game to be able to construct these rich propositional representations of game state.</p>
+                
+                <p><em>Theorem Proving</em></p>
+                
+                <p>The structure of many/most modern theorem provers and proof assistants such as Coq and Agda involves representing proofs as trees, with propositions that need to be proven residing at designated leaf nodes. The act of proving is the act of applying inference rules to these leaf nodes until no more unproven leaf nodes are present. Proof assistants are therefore a user-friendly interface for manipulating such proof trees using inference rules, while theorem provers perform the manipulations themselves, effectively working the controls on the proof assistants.</p>
+                
+                <p>This is obviously viewable as a special kind of game, where the proof tree, with a single node in focus, is the game state, and the inference rules are the controls. In fact, this view is present already in the literature on proof theory in the form dialogical games.</p>
+                
+                <p>The precise way of representing things is subtle. For instance, it is probably very useful to have some amount of access to the surrounding proof for a given goal leaf node, as it's likely to be the case that some inference rules are obviously less useful in some contexts.</p>
+                
+                <p>Additionally, rule use itself is not trivial, since many rules are parameterized. Consider, for instance, the left rules of the Intuitionistic Sequent Calculus. These rules apply to a whole set of propositions, by requiring the prover to pick a proposition of the appropriate shape. There is therefore a non-determinism in which proposition it applies to. You not only pick a left rule to use, you have to specify what to use it on. We therefore need to think of inference rules not just as single decisions, but possible as decision trees, where making one choice (such as Use A Left Rule) leads to another choice (such as Pick Proposition 3). Each of these choices may have additional context that can be used.</p>
+                
+                <p>Since the provability of logical propositions is determined entirely by the proof rules used for constructing proofs, and since propositions in those systems can be generated randomly, we can generate arbitrarily many propositions and attempt to prove them, thereby generating as much training data as desired. Again, we can use the standard game playing techniques mentioned above.</p>
+                
+                <p><em>Robotic Planning</em></p>
+                
+                <p>Robotic planning has been modeled at various times as a problem of logic and theorem proving, so naturally any such technique can be immediately treated as a theorem proving problem as described above. One important example of this approach to planning can be found in the work of !!! CITE PFENNING, who use linear logic to represent the facts about the world, and also the possible changes of state that can occur. Via the Curry-Howard Correspondence, proofs of possible changes of state turn out to be programs which, when run (e.g. by controlling a robot), will bring about those changes of state.</p>
+                
+                <p>These techniques can naturally be applied to games as well, since game characters can be seen as indistinguishable from robots from the perspective of the computer. Work by !!! CITE CHRISAMAPHONE shows how to apply linear logic to representing games of all sorts. We can therefore use this work together, with theorem proving as outlined above, to provide machine learning techniques for games with very richly structured worlds.</p>
+                
+                <p>For game planning, training data can be generated in the obvious way. For actual physical robots, however, data is limited by access to actual robots or representative simulations. Using real robots puts substantial cost on generating training data. In principle, it's possible to do this, as Google has shown in its use of many robotic arms to perform hundreds of thousands of attempts to pick up assorted objects. In practice, however, this kind of training data generation is limited to only very well funded, or very patient, research projects.</p>
+                
+                <p><em>Inductive Programming</em></p>
+                
+                <p>Program construction can itself be seem through the same lens as theorem proving and game playing, only instead of constructing a proof tree, the task is to construct an abstract syntax tree for the program. When performed by a human, this is usually done with text, but one alternative is to use what's called a structural editor, where the interactions are operations on the AST of the program directly. For example, the user might invoke an operation called New Function which creates a rough outline of a function, and then provides several sub-decisions to make, such as the functions name, and its argument names.</p>
+                
+                <p>By treating a structural editor just as we treat a theorem prover above, we can control the editor with a machine learning classifier. For inductive logic programming, the inputs to the classifier would be examples of input-output behavior that we want the program to produce. In the simplest case, we naturally would have just a single input-output pair, requiring two symbolic vectors, one representing the input data and one representing the output data. A more practical set up would be to have a large number of such pairs, so that we can provide many examples. We can use this technique to explore the search space of possible programs, checking candidate programs against the supplied examples.</p>
+                
+                <p>This technique has been explored by !!! CITE HOFFMANN in a non-machine-learning context, who found good results on a variety of simple problems. It's unknown if the technique scales to more complex problems, however. Alternatives may need to be found for more general algorithm design tasks.</p>
+                
+                <p>The space of possible programs can be narrowed further by combining with the type directed synthesis approach given below.</p>
+                
+                <p>This problem isn't entirely capable of generating training data. While it's entirely possible to randomly generate input-output pairs, that seems like an unproductive approach. However, instead of randomly generating data for random functions like that, it's entirely possible to randomly sample known functions in an existing standard library. We could then ingest standard libraries, randomly sample its functions to generate example data.</p>>
+                
+                <p><em>Program Synthesis</em></p>
+                
+                <p>Contrasting with inductive programming, which works from example behavior, program synthesis constructs programs satisfying a specification, typically in the form of a set of propositions that constrain the value, or a type that the value must have. For example, if we're defining a function <span class="code">f</span>, we could say that it must be such that for every <span class="code">x &gt; 5</span>, it is the case that <span class="code">f(x) &lt;</span>. Alternatively, we might specify that <span class="code">f</span> has some type <span class="code">(a -> b) -> [a] -> [b]</span>. In fact, in a sufficiently rich type system, such as those used by dependently typed languages like Agda, propositions can be turned into types, thereby making the entire problem uniformly about types.</p>
+                
+                <p>In this context, then, we can use the structural editor approach mentioned above, together with the theorem proving approach's representation of input vectors. We can more or less just treat the program synthesis problem as a case of theorem proving, thanks to the Curry-Howard correspondence, which says types are propositions and programs are proofs. So, by proving a proposition (i.e. type), we're constructing a proof (i.e. program) satisfying it. This merely requires that our programming language has sufficient types to represent that properties we want it's programs to have.</p>
+                
+                <p>This technique has been explored by the functional program community as a whole over the last few decades, with much work on program calculation and synthesis to be found. Additionally, !!! Hoffmann's techniques are applicable here as well. There are also a number of implementations of program synthesis for languages such as Haskell, but without the machine learning aspects suggested here, such as Magic Haskeller.</p>
+                
+                <p>This task can more readily generate training data than inductive program simply because it's a special case of theorem proving, and so random types and constraining propositions can be generated.</p>
+                
+                <p><em>Natural Language Understanding</em></p>
+                
+                <p>Many problems in natural language understanding, such as disambiguation (especially attachment ambiguities, pronominal reference ambiguities, and quantifier scope ambiguities) would benefit greatly from having statistical models that make use of the meanings of the sentences that are ambiguous. But typical representations of propositions as symbolic abstract syntax trees with binders make it somewhat difficult to do this. The symbolic vector representation presented above makes it trivial to collect statistics on the relevant portions of meanings.</p>
+                
+                <p>Unlike other techniques mentioned here, natural language understanding is very difficult to generate training data for. This is because the standard for correctness is humans themselves, not some formal process. As a result, like other linguistic data such as the Penn Tree Bank, trained humans are required to analyze and mark up data with symbolic meanings.</p>
+                
+                <p><em>Natural Language Generation</em></p>
+                
+                <p>Natural language generation techniques using graph representations of meanings have been around for a while, thanks to work by Kay. As mentioned above, this blog post is partially the result of a synthesis of this technique with others. In that setting, the goal is to encode a full proposition using grammatical rules annotated with subgraphs that indicate which parts of meaning the rule encodes. It's therefore very similar to a theorem proving problem, and we can use the above techniques for natural language generation, by driving the selection of grammar rules by the overall meaning and the portion of the overall meaning that remains to be encoded.</p>
+                
+                <p>As with natural language understanding, this task doesn't lend itself well to generation of new training data, because the standard of correctness is humans.</p>
+                
+                <p><em>Chemical Synthesis</em></p>
+                
+                <p>Chemical synthesis problems, where we try to find ways to synthesize a particular molecule, are potentially addressable using these techniques as well. Since chemicals can be modeled as graphs, the vector representations that Unterthiner et al. use can be used as representations of the target molecule. Chemical reactions, in the form of reaction formulas, can be seen as a kind of inference rule. Putting these two things together, we can use the theorem proving techniques described above to search for chemical synthesis pathways. In this approach, molecules would for the analog of propositions and known chemical reactions would be inference rules. This would be a kind of linear theorem proving, allowing us to make use of various efficiencies that are gained from linear logic proof search, as well as the ability to view linear inference as state transformation (the state here being the chemicals in the reaction vessel).</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).</p>
+            </div>
+        </section>
+    </body>
+</html>

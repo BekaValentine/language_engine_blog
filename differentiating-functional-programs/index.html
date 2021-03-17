@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Differentiating Functional Programs</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Differentiating Functional Programs</h1>
+            <div class="content">
+                <p><em>posted by Beka on ******</em></p>
+                
+                <p>Lots of stuff has been written about the topic of differentiating in the context of functional programming from the perspective of taking derivatives of data types. This blog post aims to look at a different issue, namely that of taking the derivatives of programs themselves. The general idea and motivation being as follows: normal mathematical derivatives operate over functions of type <code>ℝ → ℝ</code>, and it would be interesting, and possibly useful, if we could generalize this to functions of type <code>A → B</code>, where <code>A</code> and <code>B</code> are arbitrary algebraic data types. One possible use of this technique might be to apply deep learning techniques to the problem of program synthesis in a way that doesn't involve neural networks.</p>
+                
+                <h3>Problems Defining the Derivative</h3>
+                
+                <p>There are two problems in the task of defining derivatives for programs. The first is relatively minor: the real numbers are a continuum while algebraic data types in general are not, so we really ought to be thinking more generally. We need some conception of derivative that applies to, for instance, natural numbers, which means we'll probably need to loosen our criteria for the operation.</p>
+                
+                <p>There is a larger problem though. Suppose, for example, that the way we generalize the notion of derivative is to use the concept of a <a href="https://en.wikipedia.org/wiki/Differential_algebra">differential algebra</a>, which is how we generalize derivatives to apply to data types, as in previous work. In this setting, we need to be able to define a number of operations, in particular, "addition", "multiplication", and "composition". While this is possible for types, because we have disjoint unions, cartesian products, and composition defined on functors, it's not clear what this means for programs. One option might be to talk about some kind of non-deterministic setting, where "addition" is non-deterministic choice, and "multiplication" is some kind of concurrent process synchronization, or who knows whats. It's just not clear what could be meant hear.</p>
+                
+                <p>The solution to this problem that I've come up with is to try to use a very operational view of the derivative, and when we're taught what differentiation is, this is typically how we learn it, as a kind of intuitive guide to the mathematics. The operational view of derivatives is that we're looking for better and better approximations of the slope of a curve at a point by looking at slopes of lines formed by that point and some other nearby point on the curve. The classic definition of the derivative via a limit is precisely capturing this. So the idea will be to define something similar for general functions.</p>
+                
+                <p>This also is good because we can easily generalize this to functions over the natural numbers, because the problem reduces to a trivial question about the slope of a line defined by the value of a function at a point <code>x</code> and the point <code>x+1</code>, as this is the minimal difference in the inputs that you can get for natural numbers. However, this raises another issue: when dealing with normal derivatives, the limit from above, when we add in a difference, is the same as the limit from below, when we subtract out a difference. That is to say, the choice of <code>x+diff</code> and <code>x-diff</code> in the limit definition of derivatives is merely an aesthetic one. But this isn't the case when we're using natural numbers, because the slope when using <code>x+diff</code> can be very different from the slope when using <code>x-diff</code>.</p>
+                
+                <p>The proposal I will make here is to use a <em>directional</em> derivative. That is to say, the derivatives we care about are not merely derivatives at a point, but in some direction, and it's therefore completely reasonable to think about them being different in different directions. It's simply a fact about normal differentiation that directional derivatives coincide, but in general they need not.</p>
+                
+                <p>Another option, which produce similar, but not identical, results for discrete types, is to think about the derivative as being the limit of the slope of all the descending chains of regions around an analysis point. So instead of <code>x</code> and <code>x+diff</code>, we instead think about the slope defined by just <code>x</code> and <code>y</code>, and where those values are chosen to be smaller and smaller regions around the desired point. For the real number case, the descending chains are potentially infinite because you can always subdivide the region, whereas for the natural number case, the chains all are finite. But in either case, we have a clear notion of the limit of these operations. For natural numbers, it's simply the smallest enclosing region: <code>x-diff</code> to <code>x+diff</code>. This however isn't the same slope as described above, as it spans the point, rather than involves the point.</p>
+                
+                <p>I'll be using the directional derivative for this blog post, primarily because I'm interested in the aforementioned possibly applications to deep learning, which ultimately relies on derivatives to define gradients for gradient descent, which is really all about directional change around a point. In this context, then, directional derivatives are perfectly adequate, and possibly even preferable.</p>
+                
+                
+                
+            </div>
+        </section>
+    </body>
+</html>

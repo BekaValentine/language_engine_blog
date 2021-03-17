@@ -1,0 +1,365 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Extensible Serialization</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Extensible Serialization</h1>
+            <div class="content">
+                <p><em>posted by Beka on 21 Feb 2015</em></p>
+                
+                <p>It's frequently useful to serialize data, for storage or transmission over a network, or whatever other reasons. For simple, well-circumscribed problems, serialization can be done easily with a Forth-like schema, but a more flexible serialization library that supports extensibility, such as Haskell's <code>Data.Binary</code>, can't use this technique. In this post, I'm going to explore why, and show at least one way to implement something roughly like <code>Data.Binary</code>.</p>
+                
+                <h3>Forth-y Serialization</h3>
+                
+                <p>Let's suppose we have a data type for binary trees with no labels, such as this:</p>
+                
+                <pre><code>data TreeN = LeafN | BranchN TreeN TreeN</code></pre>
+                
+                <p>Let's serialize this to a list of integers. Normally we'd use some other representation like byte strings or something of that nature, but for simplicity of the example, integers will suffice.</p>
+                
+                <p>To do this, we need to represent each constructor — <code>LeafN</code> and <code>BranchN</code> — by a number, say, <code>0</code> and <code>1</code>. If we do an enumeration of node constructors via a <a href="http://en.wikipedia.org/wiki/Tree_traversal#Post-order">post-order traversal</a>, we can produce a Forth-like, or RPN-like, representation:</p>
+                
+                <pre><code>serializeN :: TreeN -> [Int]
+serializeN LeafN         = [0]
+serializeN (BranchN l r) = serializeN l ++ serializeN r ++ [1]</code></pre>
+                
+                <p>So now, if we do some serializations, we get what we expect:</p>
+                
+                <pre><code>serializeN LeafN == [0]
+
+serializeN (BranchN LeafN LeafN) == [0,0,1]
+
+serializeN (BranchN LeafN (BranchN LeafN LeafN)) == [0,0,0,1,1]
+
+serializeN (BranchN (BranchN LeafN LeafN) LeafN) == [0,0,1,0,1]</code></pre>
+                
+                <p>Deserializing this is relatively simple, using a stack-based approach. Reading a <code>0</code> pushes a <code>LeafN</code> onto the stack, reading a <code>1</code> pops two items from the stack, combines them with <code>BranchN</code>, and pushes the result. This process could fail, of course, so we'll account for that.</p>
+                
+                <pre><code>deserializeN :: [Int] -> Maybe TreeN
+deserializeN codes = go [] codes
+  where go [t]         []       = Just t
+        go stack       (0:rest) = go (LeafN:stack) rest
+        go (r:l:stack) (1:rest) = go (BranchN l r:stack) rest
+        go _           _        = Nothing</code></pre>
+                
+                <p>And naturally, if we deserialize the above serialized trees, we get them right back, wrapped in <code>Just</code>.</p>
+                
+                <p>Now let's suppose we want to serialize binary trees with boolean values in the leaves. Here's our type:</p>
+                
+                <pre><code>Data TreeB = LeafB Bool | BranchB TreeB</code></pre>
+                
+                <p>Serializing is easy. We'll use <code>0</code> and <code>1</code> as before, and since <code>Bool</code> has two constructors, we'll use <code>2</code> and </code>3</code> for them:</p>
+                
+                <pre><code>serializeB :: TreeB -> [Int]
+serializeB (LeafB True)  = [2,0]
+serializeB (LeafB False) = [3,0]
+serializeB (BranchB l r) = serialize l ++ serialize r ++ [1]</code></pre>
+                
+                <p>We can now write a deserializer easily enough, with the help of a tagging type for the stack:</p>
+                
+                <pre><code>data StackTagB = BoolTag Bool | TreeBTag TreeB
+
+deserializeB :: [Int] -> Maybe TreeB
+deserializeB codes = go [] codes
+  where go [TreeBTag t] [] = Just t
+        go stack (2:rest) = go (BoolTag True:stack) rest
+        go stack (3:rest) = go (BoolTag False:stack) rest
+        go (BoolTag b:stack) (0:rest)
+          = go (TreeBTag (LeafB b):stack) rest
+        go (TreeBTag r:TreeBTag l:stack) (1:rest)
+          = go (TreeBTag (BranchB l r):stack) rest
+        go _ _ = Nothing</code></pre>
+                
+                <p>This works, it's fine and dandy, so let's move on to another, more complex example: trees with integers in the leaves. Actually let's just say non-negative integers, for simplicity.</p>
+                
+                <pre><code>data TreeI = LeafI Int | BranchI TreeI TreeI</code></pre>
+                
+                <p>How might we write the serialization algorithm? Well, we need to store the integers somehow in the serialization in a way that distinguishes between the stored integers, and the integers-as-codes-for-constructors. But that's easy: we can shift them up by two, so that no conflicts are created:</p>
+                
+                <pre><code>serializeI :: TreeI -> [Int]
+serializeI (LeafI n) = [n+2,1]
+serializeI (BranchI l r) = serializeI l ++ serializeI r ++ [1]</code></pre>
+                
+                <p>Now deserialization, with a similar stack tag trick:</p>
+                
+                <pre><code>
+data StackTagI = IntTag Int | TreeITag TreeI
+
+deserializeI :: [Int] -> Maybe TreeI
+deserializeI codes = go [] codes
+  where go [TreeITag t] [] = Just t
+        go stack (n:rest)
+          | n > 1 = go (IntTag (n-2):stack) rest
+        go (IntTag n:stack) (0:rest)
+          = go (TreeITag (LeafI n):stack) rest
+        go (TreeITag r : TreeITag l : stack)  (1:rest)
+          = go (TreeITag (Branch l r):stack) rest
+        go _ _ = Nothing</code></pre>
+                
+                <p>Now we're starting to see, however, that this is requiring more and more special coding. With booleans, we could just assign codes to the boolean values since there's only two. With integers, we need a way of shifting all of them out of the way of the codes for the constructors of the trees. As things get more complex, this schema will have to get more complex. And of course, more fragile.</p>
+                
+                <p>Now what if we wanted a parametric tree, with whatever kind of data in the leaves, like so:</p>
+                
+                <pre><code>data Tree a = Leaf a | Branch (Tree a) (Tree a)</code></pre>
+                
+                <p>How could we possibly serialize that? We'd need serializers for the leaf data not just the tree as a whole. So we need to define a serialization system that's <em>extensible</em>. We could replace our <code>serialize</code> function with a type class:</p>
+                
+                <pre><code>class Serializable a where
+serialize :: a -> [Int]
+deserialize :: [Int] -> Maybe a</code></pre>
+                
+                <p>If we now try to implement an appropriate instance for <code>Tree</code>, parallel our definition for <code>TreeI</code>, we find it's not quite acceptable:</p>
+                
+                <pre><code>
+instance Serializable a => Serializable (Tree a) where
+  serialize (Leaf x)     = serialize x ++ [0]
+  serialize (Branch l r) = serialize l ++ serialize r ++ [1]
+  deserialize codes = ...
+</code></pre>
+                
+                <p>When we first encounter a <code>0</code>, how do we know it means <code>Leaf</code> instead of something else? When were serializing a type like <code>TreeB</code> or <code>TreeI</code> with a closed serialization function, we could pick the codes we wanted to use for each constructor, and even if the types were complex, we could at least circumscribed them, and determine what all the constructors could be, so there wouldn't be confusion. But since <code>Tree</code> is parametric, there's no way to force other instances of <code>Serializable</code> to not use <code>0</code> as a code. So maybe the first <code>0</code> means <code>Leaf</code>, or maybe it means the integer <code>0</code> or maybe it means something else entirely!</p>
+                
+                <p>Put another way, what if we also had the instance</p>
+                
+                <pre><code>
+instance Serializable Int
+  serialize n = [n]
+  deserialize n = ...
+</code></pre>
+                
+                <p>Then we would get <code>0</code> and <code>1</code> occurring in serializations of <code>Tree Int</code>, but they could come either from the codes for <code>Leaf</code> and <code>Branch</code>, or from the codes for the integers <code>0</code> and <code>1</code>! The add-2 trick won't work as before, because who again, who knows how many other types need serialization? Maybe it's actually add-3, or add-a-million, or add-infinity if we're serializing real numbers?</p>
+                
+                <h3>A Better Approach: Real Parsing</h3>
+                
+                <p>The problem we face is that, because of extensibility, the same code could mean different things depending on what type it came from. So, the only way to ensure we can deserialize is if we know what type the code should correspond to.</p>
+                
+                <p>With a post-order serialization, this isn't easy, because the next code in the serialization corresponds to the leftmost node in the data that it comes from, which could be arbitrarily deep and of arbitrary type. But with a <em>pre-order</code> serialization, the next code in the serialization corresponds to the <em>topmost</code> node in the data that it comes from.</p>
+                
+                <p>If we work top-down, we always know what what kind of data we're expecting, so we can use that to tell us what the code represents. If we're expecting a tree, and see the leaf code next, it corresponds to a leaf. If we're expecting a tree and see a branch code next, it corresponds to a branch and we should expect two more trees. If we're expecting an integer, and see any integer at all, <em>even the leave or branch codes</em>, we still treat it as an integer not a tree.</p>
+                
+                <p>This does mean, however, that it's harder to know when we're done deserializing. Before, we were done when the code list was empty and there was nothing left to process, but now, it's a little harder. We'll still wait for the code list to be empty, but it has to be empty at the end of the total deserialization, so we'll instead define deserialization in terms of a more fundamental, partial-deserializer or parser, that works on difference lists.</p>
+                
+                <pre><code>class Serializable a where
+  serialize :: a -> [Int]
+  parse :: [Int] -> Maybe (a,[Int])
+
+deserialize :: Serializable a => [Int] -> Maybe a
+deserialize codes = case parse codes of
+                      Just (x,[]) -> Just x
+                      _           -> Nothing</code></pre>
+                
+                <p>The <code>parse</code> function will either return as much of a deserialization as possible, together with a remainder of the input that was not part of the serialized data, or it will fail because a code is incorrect for the expected type.</p>
+                
+                <p>Here is an implementation for booleans and integers:</p>
+                
+                <pre><code>instance Serializable Bool where
+  serialize True = [0]
+  serialize False = [1]
+  parse (0:rest) = Just (True,rest)
+  parse (1:rest) = Just (False,rest)
+  parse _        = Nothing
+
+instance Serializable Int where
+  serialize n = [n]
+  parse (n:rest) = Just (n,rest)</code></pre>
+  
+                <p>Notice that the <code>parse</code> method for integers always succeeds, while for booleans it only succeeds when the next code is either <code>0</code> or <code>1</code>. If we now tried to deserialize some codes for booleans or integers, we get:</p>
+                
+                <pre><code>deserialize [0] :: Maybe (Bool
+  == Just True
+
+deserialize [0] :: Maybe Int
+  == Just 0
+
+deserialize [1] :: Maybe Bool
+  = Just False
+
+deserialize [1] :: Maybe Int
+  = Just 1
+
+deserialize [2] :: Maybe Bool
+  = Nothing
+
+parse [2] :: Maybe Int
+  = Just 2</code></pre>
+                
+                <p>Or if we compare deserialization to parsing, on some non-codes:</p>
+                
+                <pre><code>
+parse [0,2] :: Maybe (Bool,[Int])
+  = Just (True,[2])
+
+deserialize [0,2] :: Maybe Bool
+  = Nothing</code></pre>
+                
+                <p>This successfully parses because <code>[0,2]</code> starts with a code for <code>True</code>, and the remainder of the code might be for something else, but it fails to deserialize because the expectation of deserialization is that the code is for <em>exactly</em> a boolean, not just a boolean and maybe some other stuff.</p>
+                
+                <p>Let's now implement trees:</p>
+                
+                <pre><code>
+instance Serializable a => Serializable (Tree a) where
+  serialize (Leaf x)     = [0] ++ serialize x
+  serialize (Branch l r) = [1] ++ serialize l ++ serialize r
+  parse (0:rest) = case parse rest of
+                     Nothing -> Nothing
+                     Just (n,rest') -> Just (Leaf n,rest')
+  parse (1:rest) = case parse rest of
+                     Nothing -> Nothing
+                     Just (l,rest') -> case parse rest' of
+                       Nothing -> Nothing
+                       Just (r,rest'') -> Just (Branch l r, rest'')
+  parse _ = Nothing
+</code></pre>
+                
+                <p>Now we can serialize trees containing booleans, and deserialize them too, even tho they both use the same codes in different ways. Let's see how this unfolds in an example:</p>
+                
+                <pre><code>
+serialize (Leaf True)
+  = [0,0]
+</code></pre>
+                
+                <p>The first <code>0</code> came from the <code>Leaf</code> node, and the second came from <code>True</code>. If we now parse:</p>
+                
+                <pre><code>parse [0,0] :: Maybe (Tree Bool, [Int])</code></pre>
+                
+                <p>Because we're trying to parse a tree, we use the method specified for <code>Tree</code>, which looks at the first code and recognizes it's a code for a leaf node, so it recursively tries to compute</p>
+                
+                <pre><code>parse [0] :: Maybe (Bool,[Int])</code></pre>
+                
+                <p>This recursive call is for <code>Bool</code> instead, and so uses that method. It recognizes that this is a code for <code>True</code>, and succeeds, returning <code>Just (True,[])</code>. The remainder is empty at this point.</p>
+                
+                <p>We now return to the computation for <code>parse [0,0] :: Maybe (Tree Bool, [Int])</code>, and having successfully found a boolean, it succeeds and returns <code>Just (Leaf True, [])</code>. The parse is finished, with an empty remainder. If we had called <code>deserialize</code> instead, we would have succeeded with <code>Just (Leaf True)</code>.</p>
+                
+                <p>Even tho we have <code>0</code> used to represent different things, because we're using different instances of <code>Serializable</code> for each, we get different results. The different implementations of <code>parse</code> that get called treat the same code differently.</p>
+                
+                <p>This kind of approach allows us to choose serializations wisely, too. Suppose we want to serialize lists. A naive approach might be like so:</p>
+                
+                <pre><code>instance Serializable a => Serializable [a] where
+  serialize []     = [0]
+  serialize (x:xs) = [1] ++ serialize x ++ serialize xs
+  parse (0:rest) = Just ([], rest)
+  parse (1:rest) = case parse rest of
+                     Nothing -> Nothing
+                     Just (x,rest') -> case parse rest' of
+                       Nothing -> Nothing
+                       Just (xs,rest'') -> Just (x:xs, rest'')</code></pre>
+                
+                <p>But this isn't a very economical use of space. It requires one code, a single <code>1</code>, for <em>every</code> cons node in the list. That is to say, if we have 100 elements in the list, we have 100 <code>1</code> codes! We can be more clever. Knowing the length of the list, we can just specify upfront how many elements we have to parse:</p>
+                
+                <pre><code>instance Serializable a => Serializable [a] where
+  serialize xs = [length xs] ++ concat (map serialize xs)
+  parse (n:rest) = go n rest
+    where go 0 rest = Just ([],rest)
+          go n rest = case parse rest of
+                        Nothing -> Nothing
+                        Just (x,rest') -> case go (n-1) rest' of
+                          Nothing -> Nothing
+                          Just (xs,rest'') -> Just (x:xs,rest'')</code></pre>
+                
+                <p>If we serialize the list <code>[1,2,3,4]</code> we'd get just <code>[4,0,1,2,3,4]</code>, with the first number representing the length of the list, and each subsequent one being just the appropriate code. If we serialized a list of lists, such as <code>[[0,1],[2]]</code>, we'd get out <code>[2,2,0,1,1,2]</code>, with the first and second <code>2</code>s representing the lengths of the overall list and the first sublist, respectively, but the third <code>2</code> is the element of the sublist.</p>
+                
+                <h3>Monadic Deparsing</h3>
+                
+                <p>The cascades of case expressions are a bit obnoxious, so it would be nice to avoid them if possible. The type of the <code>parse</code> method happens to be monadic in <code>a</code>, so we can define a nice interface:</p>
+                
+                <pre><code>data Parser a = Parser { runParser :: [Int] -> Maybe (a,[Int]) }
+
+instance Functor Parser where
+  fmap f ps = Parser $ \codes ->
+                let (x, codes') = runParser ps codes
+                in (f x, codes')
+
+instance Monad Parser where
+  return x = Parser $ \codes -> (x,codes)
+  ps >>= f = Parser $ \codes ->
+               let (x, codes') = runParser ps codes
+               in runParseState (f x) codes'
+
+fail :: Parser a
+fail = Nothing
+
+getCode :: Parser Int
+getCode = Parser $ \codes ->
+            case codes of
+              []     -> Nothing
+              (x:xs) -> Just (x,xs)</code></pre>
+                
+                <p>With this interface, you can now avoid these cascading case expressions, because the <code>readCode</code> function does it for you. We'll redefine <code>Serializable to use this instead, and give instances for <code>Bool</code>, <code>Int</code>, and <code>Tree</code>:</p>
+                
+                <pre><code>class Serializable a where
+serialize :: a -> [Int]
+parse :: Parser a
+
+instance Serializable Bool where
+  serialize = ... as before ...
+  parse = do c <- getCode
+             case c of
+               0 -> return True
+               1 -> return False
+               _ -> fail
+
+instance Serializable Int where
+  serialize = ... as before ...
+  parse = getCode
+
+instance Serializable a => Serializable (Tree a)
+  serialize = ... as before ...
+  parse = do c <- getCode
+             case c of
+               0 -> do n <- parse
+                       return (Leaf n)
+               1 -> do l <- parse
+                       r <- parse
+                       return (Branch l r)
+               _ -> fail</code></pre>
+                
+                <p>We can even define some parser combinators, and use the applicative interface, to make it even cleaner:</p>
+                
+                <pre><code>read :: Int -> Parser ()
+read c = do c' <- getCode
+            if c == c'
+            then return ()
+            else fail
+
+(<|>) :: Parser a -> Parser a -> Parser a
+p <|> p' = Parser $ \codes ->
+             case runParser p codes of
+               Nothing -> runParser p' codes
+               Just r  -> Just r
+
+(*>) :: Parser a -> Parser a -> Parser a
+p *> p' = do _ <- p
+             p'
+
+instance Serializable Bool where
+  serialize = ...
+  parse = read 0 *> return True
+      <|> read 1 *> return False
+
+instance Serializable a => Serializable (Tree a) where
+  serialize = ...
+  parse = read 0 *> Lead <$> parse
+      <|> read 1 *> Branch <$> parse <*> parse</code></pre>
+                
+                <p>We can define further monadic interfaces to make the construction of serializations nicer, too. This would be preferable when using a representation such as byte strings.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).</p>
+                
+            </div>
+        </section>
+    </body>
+</html>

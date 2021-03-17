@@ -1,0 +1,14 @@
+1. remove comments
+   --[^\n]* -> ""
+   {-.+?-} -> ""
+
+2. remove extraneous whitespace
+   \s*\ns* -> \n
+   \s+ -> \s
+
+3. bracket type decls
+   ##] and [## at beginning and end
+   ^\s*(\S+\s*::[^\n]*) -> [## $1 ##]
+
+4. remove non-type-decles
+   ##].+?[## -> ""

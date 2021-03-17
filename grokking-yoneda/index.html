@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Grokking Yoneda</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Grokking Yoneda</h1>
+            <div class="content">
+                <p><em>posted by Beka on 8 Feb 2015</em></p>
+                
+                <p>Much has been said about the awesomeness that is the Yoneda Lemma. For instance, <a href="https://www.twitter.com/kmett">Edward Kmett</a> has said this:</p>
+
+                <blockquote class="twitter-tweet" lang="en"><p>Today&#39;s lesson:&#10;&#10;When you need something to go faster, hit it with the Yoneda lemma. &#10;&#10;Still isn&#39;t fast enough? Use it again.&#10;&#10;More soon.</p>&mdash; Edward Kmett (@kmett) <a href="https://twitter.com/kmett/status/546533863636627456">December 21, 2014</a></blockquote>
+<script async src="//platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+                <p>But what exactly is the Yoneda Lemma? What does it mean, and why does it mean that? That's what I'm going to address in this blog post, at least for the Haskell version of the lemma. If you're not familiar with Haskell, tho.. sorry.</p>
+
+                <h2>First, continuations!</h2>
+
+                <p>If I give you a value, let's say the integer <code>0</code>, we can "continuize" it by turning it into the function <code>\f -> f 0</code>. This continuized form of <code>0</code> is just as food as <code>0</code> itself, because we can always apply this to <code>id</code> and get <code>0</code> back out: <code>(\f -> f 0) id = id 0 = 0</code>. So we can go back and forth between <code>0</code> and its continuized version all day &em; they're equivalent in an important sense.</p>
+
+                <p>Let's make this slightly more general, then:</p>
+
+                <pre><code>continuize :: forall a. a -> (forall b. (a -> b) -> b)
+continuize x g = g x
+
+drop :: forall a. (forall b. (a -> b) -> b) -> a
+drop h = h id</code></pre>
+
+                <p>The crucial bit here is that <code>forall b</code> part: continuized values can continue towards anything. By "continue" I just mean the  following sort of correspondence: given any program that contains <code>0</code>, let's say the program <code>0 + 1</code>, we can look at the program around <code>0</code> &em; <code>_ + 1</code> as a way to continue building a program starting with <code>0</code>, and this naturally corresponds to pulling out a function as in <code>(\x -> x + 1) 0</code>. This function tells us how to continue computing with a value, in this case, <code>0</code>, and in this setting is called a "continuation".</p>
+
+                <p>A continuized value is just a value that has been lifted to take a continuation as input.</p>
+
+                <pre><code>continuize 0 $ \x -> x + 1</code></pre>
+
+                <p>This code can be understood sort of by reading it as "start with 0, and continue by adding one to it". We can chain these things together in a nice way:</p>
+
+                <pre><code>continuize 0 $ \x ->
+continuize (x + 1) $ \y ->
+continuize (y * 2) $ \z ->
+...</code></pre>
+
+                <p>Or in English, start with 0, add one to 1, now multiply <em>that</em> by 2, then ...</p>
+
+                <p>You can probably see a monad in here. There is, but don't worry about that.</p>
+
+                <p>The <code>drop</code> function just says that if we have such a continuized value, there's always a trivial continuation for it: the one that does nothing at all and gives the number back: <code>continuize 0 $ \x -> x == 0</code>.</p>
+
+                <p>These two functions together therefore form an isomorphism: for every <code>Int</code>, say, there exists a function of type <code>forall b. (Int -> b) -> b</code> provided by <code>continuize</code>, and conversely, for every function of type <code>forall b. (Int -> b) -> b</code> there exists an <code>Int</code> provided by <code>drop</drop>, and moreover, this is a one-to-one correspondence.</p>
+
+                <p>Or to really put it in perspective: if I give you a function <code>h :: forall b. (Int -> b) -> b</code>, then you know that this function must secretly be hiding an <code>Int</code> inside somehow, because how else could it get out any <code>b</code>, given just the <code>Int -> b</code> input? The only way it could is to use its input <em>and the hidden <code>Int</code></em>!</p>
+
+                <h2>Now for Yoneda</h2>
+
+                <p>So what does this have to do with the Yoneda Lemma? Well, simply, the Yoneda Lemma is a generalization of this to functors:</p>
+
+                <pre><code>continuizeYo :: forall a f. Functor f => f a -> (forall b. (a -> b) -> f b)
+continuizeYo x g = fmap g x
+
+dropYo :: forall a f. Functor f => (forall b. (a -> b) -> f b) -> f a
+dropYo h = h id</code></pre>
+
+                <p>The perspectival description for this is more or less the same as for continuations. Supposing I again fix <code>a = Int</code>, and also <code>f = []</code>, and I give you a function <code>h :: forall b. (Int -> b) -> [b]</code>, how can this possible give me a list of <code>b</code>s just using a function of type <code>Int -> b</code>? Obviously only if it has a list of <code>Int</code>s tucked away somewhere that it can map over! And it doesn't matter what <code>a</code> and <code>f</code> are, provided that there's some map-like functionality, hence the <code>Functor f</code> constraint.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).<!-- Here's <a href="https://news.ycombinator.com/item?id=8756903">the HN thread</a> if you prefer that mode, and also <a href="http://www.reddit.com/r/programming/duplicates/2pgq72/implementing_language_engine_pluralities_in/">the Reddit threads</a>.--></p>
+                
+            </div>
+        </section>
+    </body>
+</html>

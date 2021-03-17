@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - The Conversational AI Problem Landscape</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>The Conversational AI<br/>Problem Landscape</h1>
+            <div class="content">
+                <p><em>posted by Beka on 10 Jan 2015</em></p>
+                
+                <p>In this blog post, I'm going to discuss some of the major problems that I think conversational AI faces in achieving truly human-like performance. The issues I have in mind are</p>
+                
+                <p><ol>
+                    <li>Syntax / Grammar</li>
+                    <li>Non-idiomatic Meaning</li>
+                    <li>Idiomatic Meaning</li>
+                    <li>Metaphors / Analogies</li>
+                    <li>Speaker's Intentions and Goals</li>
+                </ol></p>
+                    
+                <p>Some of them are, in my opinion, relatively easy to solve, at least in terms of building the necessary programs/tools (data and learning is a separate issue), but others, especially the last one, are substantially harder. But hopefullyI can convince you that at least the first four are within our grasp.</p>
+                
+                <h3>Syntax / Grammar</h3>
+                
+                <p>Syntax/grammar is the way words combine to form larger units like phrases, sentences, etc. A great deal is known about syntax from decades of scientific investigation, despite what you might conclude from just looking at popular NLP.</p>
+
+                <p>One major reason NLP doesn't care much about scientific insights is that most NLP tasks don't need to use syntax. Spam detection, for instance, or simple sentiment analysis, can be done without any consideration to syntax (tho sentiment analysis does seem to benefit from some primitive syntax).</p>
+
+                <p>Additionally, learning grammars (rather than hand-building them) is hard. CFGs are generally learned from pre-existing parsed corpuses built by linguists, like the Penn Treebank. As a result, NLPers tend to prefer simpler, but drastically less capable, regular grammars (in the form of Markov models/n-gram models/etc.), which require nothing but string inputs.</p>
+                
+                <h3>Non-idiomatic Meaning</h3>
+                
+                <p>By non-idiomatic meaning I simply mean the meaning that an expression has in virtue of the meanings of its parts and the way those parts are put together, often called compositional meaning. For example, "brown cow" means something approximately like "is brown" and "is a cow" at the same time. Something is a brown cow, non-idiomatically, if it's brown, and if it's a cow.</p>
+
+                <p>In a very real sense, non-idiomatic meaning is extremely well understood, far more than mainstream NLP would indicate, just like syntax. Higher-order logics can capture the compositional aspects tidily, while the core meanings of words/predicates can be pushed out to the non-linguistic systems (e.g. its a non-linguistic fact that the word "JPEG" classifies the things it classifies the way it does).</p>
+                
+                <h3>Idiomatic Meaning</h3>
+                
+                <p>Idiomatic meaning is just meaning that is not compositional in the above sense. So while "brown cow" non-idiomatically or compositionally means a thing which is both brown and a cow, idiomatically it's the name of a kind of drink. Similarly, "kick the bucket" non-idiomatically/compositionally means just some act of punting some bucket, idiomatically it means to die.</p>
+
+                <p>Idioms are also pretty easy. Typically, meaning is assigned to syntactic structures as follows: words get assigned values, while local regions of a parse tree are given compositional rules (for instance, subject + verb phrase is interpreted by function application, applying the meaning of the verb phrase to the meaning of the subject).</p>
+
+                <p>Idioms are just another way of assigning meanings to a parse tree, e.g. the tree for "kick the bucket" is assigned a second meaning "die" along side its normal compositional meaning. There are relatively few commonly used idioms, so enumerating them in a language system isn't too huge a task.</p>
+                
+                <h3>Metaphors / Analogies</h3>
+                
+                <p>Metaphorical or analogical language is considerable harder than idiomatic meaning. Unlike idioms, metaphors and analogies tend to be invented on the fly. There are certain conventional metaphors, especially conceptual metaphors for thinking, such as the change-of-state-is-motion metaphor, but we can invent and pick up new metaphors pretty easily just by encountering them.</p>
+
+                <p>The typical structure of metaphors/analogies is that we're thinking about one domain of knowledge by way of another domain of knowledge. For instance, thinking of proving a theory as a kind of game, or programs as a kind of recipe. These work by identifying key overlaps in the features and structures of both domains, and then ignoring the differences. Good metaphors and analogies also have mappings back and forth associating the structure of the domains so that translation is possible.</p>
+
+                <p>Take, for instance, the linguistic metaphor "a river of umbrellas", as one might describe that one scene from Minority Report outside the mall. The logic behind the metaphor is: the concept 'river' is linked to the word "river", and rivers are long, narrow, and consist of many individual bits moving in roughly the same direction. This is also what the sidewalk looked like — long, narrow, with many individual bits moving in roughly the same direction, only instead of the bits being bits of water, they were people holding umbrellas. So we can think of this sidewalk full of people like we think of rivers, and therefore use the words for rivers to talk about the sidewalk and the people on it with their umbrellas.</p>
+
+                <p>The most likely scalable solution to metaphorical/analogical thinking is identifying the core components that are readily available. Geometric, spatial, kinematic, and numeric features tend to be very easy to pick out as features for making analogies. As for identifying the use of metaphors in language, typically metaphorical usages are highly atypical. The earlier metaphor of a river of hats is unusual in that rivers aren't made of hats, and this mismatch expectation and usage can be used to cue a search for the metaphorical mapping that underlies the expression.</p>
+                
+                <h3>Speaker's Intentions and Goals</h3>
+                
+                <p>Possibly the hardest aspect of interacting conversationally is knowing how a speakers intentions and goals in the conversation guide the plausible moves the AI can make in a conversation. All sorts of Gricean principles become important, most of which can probably be seen as non-linguistic principles governing how humans interact more broadly.</p>
+
+                <p>Consider for example a situation where a person's car runs out of gass on the side of the road, and a stranger walks by. The driver might say to the stranger, "do you know where I can get some gas?" and the passer-by might say "there's a gas station just up the road a bit". Now, any geek will know that the _literal_ answer to the drivers question is "yes" and that's it — it was a yes/no question, after all. But the passer-by instead gives the location of a gas station. Why? Well probably a good explanation is that the passer-by can infer the speaker's goal — getting some gas — and the information required to achieve that goal — the location of a gas station — and provides as much of that information as possible.</p>
+
+                <p>The driver's question was the first step in getting to that goal, perhaps with a literal conversation going something like this:</p>
+
+                <pre><code>Driver: Do you know what I can get some gas?
+Passer-by: Yes.
+Driver: Please tell me.
+Passer-by: At the gas station up the road a bit.</code></pre>
+
+                <p>But the passer-by can see this conversation play out, and immediately jumps to the crucial information — where the gas station is located.</p>
+
+<p>This kind of interaction is especially hard because it requires, firstly, the ability to identify the speakers goals and intentions (in this case, getting gas), and figuring out appropriate responses. A cooperative principle — be helpful, help the person achieve their goals — is a good start for an AI (better than a principle of 'avoid humans they suck') — but something more is still necessary.</p>
+
+<p>A possible solution is some inference tools, especially frame-based. The situation that the driver was in ought to be highly-biasing towards the driver's goal being to get gas even without the driver saying a thing, because the functions and purposes of various things involved, plus typical failure modes, would strongly push towards getting gas as important. However this now requires large-scale world knowledge (tho projects like Cyc and OpenMind might be able to be relied-on?).</p>
+
+                <hr/>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).<!-- Here's <a href="https://news.ycombinator.com/item?id=8756903">the HN thread</a> if you prefer that mode, and also <a href="http://www.reddit.com/r/programming/duplicates/2pgq72/implementing_language_engine_pluralities_in/">the Reddit threads</a>.--></p>
+                
+            </div>
+        </section>
+    </body>
+</html>

@@ -1,0 +1,476 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Bidirectional Proof Refinement</title>
+        
+        <script src="/resources/prooftree/svg.js"></script>
+        <script src="/resources/prooftree/prooftree.js"></script>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Bidrectional<br/>Proof Refinement</h1>
+            <div class="content">
+                <p><em>posted by Beka on 3 Mar 2016</em></p>
+                
+                <p>Last time, we looked at the very basics of proof refinement systems. I noted at the end that there was a big drawback of the systems as shown, namely that information flows only in one direction: from the root of a proof tree to the leaves. In this post, we'll see how to get information to flow in the opposite direction as well.</p>
+                
+                <h3>Addition Again</h3>
+                
+                <p>The addition judgment <span class="code">Plus</span> which we defined last time was a three-argument judgment. The judgment <span class="code">Plus L M N</span> was a claim that <span class="code">N</span> is the sum of <span class="code">L</span> and <span class="code">M</span>. But we might want to instead thing about specifying only some of the arguments to this judgment. In a language like Prolog, this is implemented by the use of metavariables which get valued in the course of computation. In the proof refinement setting, however, we take a different approach. Instead, we make use of a notion called bidirectionality, where we specify that a judgment's arguments can come in two modes: input and output. This is somewhat related to viewing thing from a functional perspective, but in a more non-deterministic or relational fashion.</p>
+                
+                <p>Let's start by deciding that the mode of the first two arguments to <span class="code">Plus</span> is that of input, and the third is output. This way we'll think about actually computing the sum of two numbers. Instead of three <span class="code">Nat</span> inputs, we'll instead use only two. We'll use a judgment name that reflects which two:</p>
+                
+                <pre><code>-- Haskell
+
+data Judgment = Plus12 Nat Nat
+  deriving (Show)</code></pre>
+                
+                <pre><code>// JavaScript
+
+function Plus12(x,y) {
+    return { tag: "Plus12", args: [x,y] };
+}</code></pre>
+                
+                <p>The behavior of the decomposer for <span class="code">Plus12</span> will have to be slightly different now, tho, because there's only two arguments. But additionally, we want to not only expand a goal into subgoals, but also somehow synthesize a result from the results of the subgoals. So where before we had only to map from a goal to some new goals, now we must also provide something that maps from some subresults to a result.</p>
+                
+                <p>Rather than giving two separate functions, we'll give a single function that returns both the new subgoals, and the function that composes a value from the values synthesized for those subgoals.</p>
+                
+                <pre><code>-- Haskell
+decomposePlus12 :: Nat -> Nat -> Maybe ([Judgment], [Nat] -> Nat)
+decomposePlus12 Zero y = Just ([], \zs -> y)
+decomposePlus12 (Suc x) y = Just ([Plus12 x y], \[z] -> Suc z)
+
+decompose :: Judgment -> Maybe ([Judgment], [Nat] -> Nat)
+decompose (Plus12 x y) = decomposePlus12 x y</code></pre>
+                
+                <pre><code>// JavaScript
+
+function decomposePlus12(x,y) {
+    if (x.tag === "Zero") {
+        return Just([[], zs => y]);
+    } else if (x.tag === "Suc") {
+        return Just([[Plus12(x.arg,y)], zs => Suc(zs[0])]);
+    }
+}
+
+function decompose(j) {
+    if (j.tag === "Plus12") {
+        return decomposePlus12(j.args[0], j.args[1]);
+    }
+}</code></pre>
+                
+                <p>The <span class="code">decompose</span> function is somewhat redundant in this example, but the shape of the problem is preserved by having this redundancy. The same is true of the <span class="code">Maybe</span> in the types. We can always decompose now, so the <span class="code">Nothing</span> option is never used, but I'm keeping it here to maintain parallelism with the general framework.</p>
+                
+                <p>Building a proof tree in this setting proceeds very similarly to how it did before, except now we need to make use of the synthesis functions in parallel with building a proof tree:</p>
+                
+                <pre><code>-- Haskell
+
+findProof :: Judgment -> Maybe (ProofTree, Nat)
+findProof j =
+  case decompose j of
+    Nothing -> Nothing
+    Just (js, f) -> case sequence (map findProof js) of
+      Nothing -> Nothing
+      Just tns -> let (ts, ns) = unzip tns
+                  in Just (ProofTree j ts, f ns)</code></pre>
+                
+                <pre><code>// JavaScript
+
+function unzip(xys) {
+    var xs = [];
+    var ys = [];
+    
+    for (var i = 0; i &lt; xys.length; i++) {
+        xs.push(xys[i][0]);
+        ys.push(xys[i][1]);
+    }
+    
+    return [xs,ys]
+}
+
+function findProof(j) {
+    var mjs = decompose(j);
+    
+    if (mjs.tag === "Nothing") {
+        return Nothing;
+    } else if (mjs.tag === "Just") {
+        var js = mjs.arg[0]
+        var f = mjs.arg[1]
+        var mtns = sequence(js.map(j => findProof(j)));
+        
+        if (mtns.tag === "Nothing") {
+            return Nothing;
+        } else if (mtns.tag === "Just") {
+            var tsns = unzip(mtns.arg);
+            return Just([ProofTree(j, tsns[0]), f(tsns[1])]);
+        }
+    }
+}</code></pre>
+                
+                <p>Now when we run this on some inputs, we get back not only a proof tree, but also the resulting value, which is the <span class="code">Nat</span> that would have been the third argument of <span class="code">Plus</span> in the previous version of the system.</p>
+                
+                <p>Let's now add another judgment, <span class="code">Plus13</span>, which will synthesize the second argument of the original <span class="code">Plus</span> judgment from the other two. Therefore, the judgment <span class="code">Plus13 L N</span> means <span class="code">L</span> subtracted from <span class="code">N</span>. We'll add this judgment to the existing <span class="code">Judgment</span> declarations.</p>
+                
+                <pre><code>-- Haskell
+
+data Judgment = Plus12 Nat Nat | Plus13 Nat Nat
+  deriving (Show)</code></pre>
+                
+                <pre><code>// JavaScript
+
+function Plus13(x,z) {
+    return { tag: "Plus13", args: [x,z] };
+}</code></pre>
+                
+                <p>We can now define a decomposition function for this judgment. Notice that this one is partial, in that, for some inputs, there's no decomposition because the first argument is larger than the second. We'll also extend the <span class="code">decompose</span> function appropriately.</p>
+                
+                <pre><code>-- Haskell
+
+decomposePlus13 :: Nat -> Nat -> Maybe ([Judgment], [Nat] -> Nat)
+decomposePlus13 Zero z = Just ([], \xs -> z)
+decomposePlus13 (Suc x) (Suc z) = Just ([Plus13 x z], \[x] -> x)
+decomposePlus13 _ _ = Nothing
+
+decompose :: Judgment -> Maybe ([Judgment], [Nat] -> Nat)
+decompose (Plus12 x y) = decomposePlus12 x y
+decompose (Plus13 x z) = decomposePlus13 x z</code></pre>
+                
+                <pre><code>// JavaScript
+
+function decomposePlus13(x,z) {
+    if (x.tag === "Zero") {
+        return Just([[], xs => z]);
+    } else if (x.tag === "Suc" &amp;&amp; z.tag === "Suc") {
+        return Just([[Plus13(x.arg, z.arg)], xs => xs[0]]);
+    } else {
+        return Nothing;
+    }
+}
+
+function decompose(j) {
+    if (j.tag === "Plus12") {
+        return decomposePlus12(j.args[0], j.args[1]);
+    } else if (j.tag === "Plus13") {
+        return decomposePlus13(j.args[0], j.args[1]);
+    }
+}</code></pre>
+                
+                <p>If we now try to find a proof for <span class="code">Plus13 (Suc Zero) (Suc (Suc (Suc Zero)))</span>, we get back <span class="code">Suc (Suc Zero)</span>, as expected, because 1 subtracted from 3 is 2. Similarly, if we try to find a proof for <span class="code">Plus13 (Suc (Suc Zero)) (Suc Zero)</span>, we find that we get no proof, because we can't subtract a number from something smaller than it.</p>
+                
+                <h3>Type Checking Again</h3>
+                
+                <p>We'll aim to do the same thing with the type checker as we did with addition. We'll split the <span class="code">HasType</span> judgment into two judgments, <span class="code">Check</span> and <span class="code">Synth</span>. The <span class="code">Check</span> judgment will be used precisely in those cases where a type must be provided for the proof to go through, while the <span class="code">Synth</span> judgment will be used for cases where the structure of the program is enough to tell us its type.</p>
+                
+                <pre><code>-- Haskell
+
+data Judgment = Equal Type Type
+              | Check [(String,Type)] Program Type
+              | Synth [(String,Type)] Program
+  deriving (Show)</code></pre>
+                
+                <pre><code>// JavaScript
+
+function Equal(a,b) {
+    return { tag: "Equal", args: [a,b] };
+}
+
+function Check(g,m,a) {
+    return { tag: "Check", args: [g,m,a] };
+}
+
+function Synth(g,m) {
+    return { tag: "Synth", args: [g,m] };
+}</code></pre>
+                
+                <p>Additionally, because of these changes in information flow, we'll remove some type annotations from the various program forms, and instead introduce a general type annotation form that will be used to shift between judgments explicitly.</p>
+                
+                <pre><code>-- Haskell
+
+data Program = Var String | Ann Program Type
+             | Pair Program Program | Fst Program | Snd Program
+             | Lam String Program | App Program Program
+  deriving (Show)</code></pre>
+                
+                <pre><code>// JavaScript
+
+function Var(x) {
+    return { tag: "Var", arg: x };
+}
+
+function Ann(m,a) {
+    return { tag: "Ann", args: [m,a] };
+}
+
+function Pair(m,n) {
+    return { tag: "Pair", args: [m,n] };
+}
+
+function Fst(m) {
+    return { tag: "Fst", arg: m };
+}
+
+function Snd(m) {
+    return { tag: "Snd", arg: m };
+}
+
+function Lam(x,m) {
+    return { tag: "Lam", args: [x,m] };
+}
+
+function App(m,n) {
+    return { tag: "App", args: [m,n] };
+}</code></pre>
+                
+                <p>The last change that we'll make will be to change the notion of synthesis a little bit from what we had before. In the addition section, we said merely that we needed a function that synthesized a new value from some subvalues. More generally, though, we need that process to be able to fail, because we wish to place constraints on the synthesized values. To capture this, we'll wrap the return type in <span class="code">Maybe</span>.</p>
+                
+                <pre><code>-- Haskell
+
+decomposeEqual
+  :: Type -> Type -> Maybe ([Judgment], [Type] -> Maybe Type)
+decomposeEqual Nat Nat =
+  Just ([], \as -> Just undefined)
+decomposeEqual (Prod a1 b1) (Prod a2 b2) =
+  Just ([Equal a1 a2, Equal b1 b2], \as -> Just undefined)
+decomposeEqual (Arr a1 b1) (Arr a2 b2) =
+  Just ([Equal a1 a2, Equal b1 b2], \as -> Just undefined)
+decomposeEqual _ _ = Nothing
+
+decomposeCheck
+  :: [(String,Type)]
+  -> Program
+  -> Type
+  -> Maybe ([Judgment], [Type] -> Maybe Type)
+decomposeCheck g (Pair m n) (Prod a b) =
+  Just ([Check g m a, Check g n b], \as -> Just undefined)
+decomposeCheck g (Lam x m) (Arr a b) =
+  Just ([Check ((x,a):g) m b], \as -> Just undefined)
+decomposeCheck g m a =
+  Just ( [Synth g m]
+       , \[a2] -> if a == a2 then Just undefined else Nothing
+       )
+
+decomposeSynth
+  :: [(String,Type)]
+  -> Program
+  -> Maybe ([Judgment], [Type] -> Maybe Type)
+decomposeSynth g (Var x) =
+  case lookup x g of
+    Nothing -> Nothing
+    Just a -> Just ([], \as -> Just a)
+decomposeSynth g (Ann m a) =
+  Just ([Check g m a], \as -> Just a)
+decomposeSynth g (Fst p) =
+  Just ( [Synth g p]
+       , \[t] -> case t of
+                   Prod a b -> Just a
+                   _ -> Nothing
+       )
+decomposeSynth g (Snd p) =
+  Just ( [Synth g p]
+       , \[t] -> case t of
+                   Prod a b -> Just b
+                   _ -> Nothing
+       )
+decomposeSynth g (App f x) =
+  Just ( [Synth g f, Synth g x]
+       , \[s,t] -> case s of
+                     Arr a b | a == t -> Just b
+                     _ -> Nothing)
+decomposeSynth _ _ = Nothing
+
+decompose :: Judgment -> Maybe ([Judgment], [Type] -> Maybe Type)
+decompose (Equal a b) = decomposeEqual a b
+decompose (Check g m a) = decomposeCheck g m a
+decompose (Synth g m) = decomposeSynth g m</code></pre>
+                
+                <pre><code>// JavaScript
+
+function decomposeEqual(a,b) {
+    if (a.tag === "Nat" &amp;&amp; b.tag === "Nat") {
+        return Just([[], as => Just(undefined)]);
+    } else if (a.tag === "Prod" &amp;&amp; b.tag === "Prod") {
+        return Just([ [Equal(a.args[0], b.args[0]),
+                       Equal(a.args[1], b.args[1])],
+                      as => Just(undefined) ]);
+    } else if (a.tag === "Arr" &amp;&amp; b.tag === "Arr") {
+        return Just([ [Equal(a.args[0], b.args[0]),
+                       Equal(a.args[1], b.args[1])],
+                      as => Just(undefined) ]);
+    } else {
+        return Nothing;
+    }
+}
+
+function eq(x,y) {
+  if (x instanceof Array &amp;&amp; y instanceof Array) {
+    if (x.length != y.length) { return false; }
+    
+    for (var i = 0; i &lt; x.length; i++) {
+      if (!eq(x[i], y[i])) { return false; }
+    }
+    
+    return true;
+  } else if (x.tag === y.tag) {
+    if (x.args &amp;&amp; y.args) {
+      return eq(x.args,y.args);
+    } else if (x.arg &amp;&amp; y.arg) {
+      return eq(x.arg,y.arg);
+    } else if (!x.arg &amp;&amp; !y.arg) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+}
+
+function decomposeCheck(g,m,a) {
+    if (m.tag === "Pair" &amp;&amp; a.tag === "Prod") {
+        return Just([ [Check(g, m.args[0], a.args[0]),
+                       Check(g, m.args[1], a.args[1])],
+                      as => Just(undefined)]);
+    } else if (m.tag === "Lam" &amp;&amp; a.tag === "Arr") {
+        return Just([ [Check([[m.args[0], a.args[0]]].concat(g),
+                             m.args[1],
+                             a.args[1])],
+                      as => Just(undefined)]);
+    } else {
+        return Just([ [Synth(g,m,a)],
+                      as => eq(a,as[0]) ? Just(undefined) : Nothing ])
+    }
+}
+
+function decomposeSynth(g,m) {
+    if (m.tag === "Var") {
+        var ma = lookup(m.arg, g);
+        
+        if (ma.tag === "Nothing") {
+            return Nothing;
+        } else if (ma.tag === "Just") {
+            return Just([[], as => Just(ma.arg)]);
+        }
+    } else if (m.tag === "Ann") {
+        return Just([ [Check(g, m.args[0], m.args[1])],
+                      as => Just(m.args[1]) ]);
+    } else if (m.tag === "Fst") {
+        return Just([ [Synth(g, m.arg)],
+                      as => as[0].tag === "Prod" ?
+                              Just(as[0].args[0]) :
+                              Nothing ]);
+    } else if (m.tag === "Snd") {
+        return Just([ [Synth(g, m.arg)],
+                      as => as[0].tag === "Prod" ?
+                              Just(as[0].args[1]) :
+                              Nothing ]);
+    } else if (m.tag === "App") {
+        return Just([ [Synth(g, m.args[0]), Synth(g, m.args[1])],
+                      as => as[0].tag === "Arr" &amp;&amp;
+                              eq(as[0].args[0], as[1]) ?
+                                Just(as[0].args[1]) :
+                                Nothing ]);
+    } else {
+        return Nothing;
+    }
+}
+
+function decompose(j) {
+    if (j.tag === "Equal") {
+        return decomposeEqual(j.args[0], j.args[1]);
+    } else if (j.tag === "Check") {
+        return decomposeCheck(j.args[0], j.args[1], j.args[2]);
+    } else if (j.tag === "Synth") {
+        return decomposeSynth(j.args[0], j.args[1]);
+    }
+}</code></pre>
+                
+                <p>Finally, the <span class="code">findProof</span> function has to be augmented slightly to deal with the new <span class="code">Maybe</span> in the return type of the synthesizing function:</p>
+                
+                <pre><code>-- Haskell
+
+findProof :: Judgment -> Maybe (ProofTree, Type)
+findProof j =
+  case decompose j of
+    Nothing -> Nothing
+    Just (js,f) -> case sequence (map findProof js) of
+      Nothing -> Nothing
+      Just tsas ->
+        let (ts,as) = unzip tsas
+        in case f as of
+             Nothing -> Nothing
+             Just a -> Just (ProofTree j ts, a)</code></pre>
+                
+                <pre><code>// JavaScript
+
+function findProof(j) {
+    var mjs = decompose(j);
+    
+    if (mjs.tag === "Nothing") {
+        return Nothing;
+    } else if (mjs.tag === "Just") {
+        var js = mjs.arg[0]
+        var f = mjs.arg[1]
+        var mtns = sequence(js.map(j => findProof(j)));
+        
+        if (mtns.tag === "Nothing") {
+            return Nothing;
+        } else if (mtns.tag === "Just") {
+            var tsns = unzip(mtns.arg);
+            var mn = f(tsns[1]);
+            
+            if (mn.tag === "Nothing") {
+                return Nothing;
+            } else if (mn.tag === "Just") {
+                return Just([ProofTree(j, tsns[0]), mn.arg]);
+            }
+        }
+    }
+}</code></pre>
+                
+                <p>If we now try to find proofs for some typical synthesis and checking examples, we find what we expect:</p>
+                
+                <pre><code>findProof (Check [] (Lam "p" (Fst (Var "p"))) (Arr (Prod Nat Nat) Nat))
+
+findProof (Check [] (Lam "p" (Fst (Var "p"))) (Arr Nat Nat))
+
+findProof (Synth [("p",Prod Nat Nat)] (Fst (Var "p")))</code></pre>
+                
+                <h3>Conclusion</h3>
+                
+                <p>The bidirectional style in this post has some interesting limitations and draw backs. Consider the case of the rule for <span class="code">App</span>: it has to synthesize the type of both the function and the argument and then compare them appropriately. This means that certain programs require additional type annotations to be written. But this is somewhat unnecessary, because once we synthesize the type of the function, we can use that information to <em>check</em> the argument. In the next blog post, I'll try to explain how to do this in a more elegant way, the combines both the upward and downward flows of information.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).</p>
+            </div>
+        </section>
+    </body>
+    
+    
+    <script>
+        const proofEls = document.getElementsByClassName("proof");
+        const proofs = [];
+        for (var i = 0; i < proofEls.length; i++) {
+            proofs.push(proofEls[i]);
+        }
+        
+        for (var i = 0; i < proofs.length; i++) {
+            let p = document.createElement("p");
+            let proof = proofs[i];
+            let drawing = SVG(p);//.size(500,200);
+            proof.parentNode.replaceChild(p,proof);
+            
+            renderProofTree(linesToTree(proof.innerHTML), drawing);
+            
+            p.style.height = drawing.bbox().height + "px";
+        }
+    </script>
+</html>

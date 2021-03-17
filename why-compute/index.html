@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Why Compute?</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Why Compute?</h1>
+            <div class="content">
+                <p><em>posted by Beka on 21 Feb 2015</em></p>
+                
+                <p>Why do we compute things? What's the point of computing? This seems like a silly question, but the answer to it is interesting and connects a lot of different things.</p>
+                
+                <p>To bring the question into better focus, consider the factorial function, <code>fac</code> which sends any number to it's factorial. So of course <code>fac(3) = 6</code> and <code>fac(4) = 24</code> and <code>fac(5) = 120</code> and so on. But if these equations hold, and they had better, then why do we compute <code>fac(5)</code> at all? The equations hold, so they're <em>equal</em>, and everything that's true of one is true of the other. So why bother computing?</p>
+                
+                <p>What it comes down to is the object language/meta language distinction and obviousness. When we write programs, whether they're procedural or functional, interpreted or compiled, we're writing syntactic forms that represent things. The <em>program</em> <code>fac(5)</code> is different from the <em>number</em> <code>fac(5)</code>, and it's only at the number level that the equation <code>fac(5) = 120</code> holds. At the program level it doesn't hold at all.</p>
+                
+                <p>A good way to think about it is that programs are, well, codes, or encodings, or "quotations" of a sort. Just as we might say that Clark Kent and Superman are the same, but deny that "Clark Kent" and "Superman" are the same, the numbers <code>fac(5)</code> and <code>120</code> are the same, but the programs <code>fac(5)</code> and <code>120</code> are not. This leads us some of the way to understanding why we compute: because computers can only manipulate programs (/data/representations), not actual numbers, people, or whatever else.</p>
+                
+                <p>Let's look at a slightly more complicated example tho, that will make it easier to see what computing does. Consider the following Haskell program. If you don't know Haskell, it shouldn't be too confusing.</p>
+                
+                <pre><code>if 1+1 == 2
+then putStr "Ok"
+else putStr "Uh oh"</code></pre>
+                
+                <p>Obviously, this program prints <code>Ok</cde> to the terminal. But why is it obvious? Well we're pretty smart humans, we can look at this and say, well obviously the equation is true so it'll do the first branch. But how about this program (which isn't quite Haskell, but go with me here):</p>
+                
+                <pre><code>if (the Riemann zeta function for negative even integers is 0)
+then putStr "Ok"
+else putStr "Uh oh"</code></pre>
+                
+                <p>You're probably less confident in saying it prints <code>Ok</code>, unless you're a mathematician and know that indeed the Riemann zeta function is 0 for negative even integers. Not all things are obvious, and this is especially true for computers, so if we want a computer to perform these actions we specify, we have to make it obvious just which actions the computer should perform.</p>
+                
+                <p>Returning to the previous program, if the computer is to perform the specified action (and the whole program does indeed specify an action), the computer has to see what the action "obviously" is. But in it's current form, it's not obvious which branch of the conditional the computer should execute. If only the condition was of the form <code>if True then ... else ...</code> or the form <code>if False then ... else ...</code> it would be obvious! The computer needs to transform it into a more obvious form, using some built-in rules.</p>
+                
+                <p>Fortunately, in Haskell, the equality function <code>(==)</code> has rules that specify how to turn it into either <code>True</code> or <code>False</code> when applied to numbers: given an expression <code>x == y</code>, if the numbers represented by <code>x</code> and <code>y</code> are the same (note: the <em>numbers represented</em>, not the programs that represent), then turn <code>x == y</code> into <code>True</code>, otherwise turn it into <code>False</code>. So, easy. Are the numbers represented by <code>1+1</code> and <code>2</code> the same? Well.. it's not obvious.</p>
+                
+                <p>So again, we need a way to make it more obvious. And of course we can do that: we can convert <code>1+1</code> into some other form, consisting of just digits, and then it would be obvious what number it represents. So the computer uses the rules that Haskell provides, converting <code>1+1</code> into <code>2</code>, thus changing <code>1+1 == 2</code> into <code>2 == 2</code>. Now the equality function can look at this representation and see, indeed, <code>2</code> and <code>2</code> represent the same number, so we should turn <code>2 == 2</code> into <code>True</code>.</p>
+                
+                <p>So: we've turned <code>1+1 == 2</code> into <code>2 == 2</code> into <code>True</code>, which means we've turned this:</p>
+                
+                <pre><code>if 1+1 == 2
+then putStr "Ok"
+else putStr "Uh oh"</code></pre>
+                
+                <p>into this:</p>
+                
+                <pre><code>if True
+then putStr "Ok"
+else putStr "Uh oh"</code></pre>
+                
+                <p>And now it's obvious what the computer should do: to perform this action, the computer performs <code>putStr "Ok"</code>, which it can do trivially.</p>
+                
+                <p>That's what computing is form: turning the non-obvious into the obvious, so our rather stupid computers can perform the actions we expect of them. And ultimately that means something roughly like making equality obvious: is this part of the program <code>True</code> or <code>False</code>, is this part <code>1</code> or <code>2</code>, is this <code>Lambda</code> or </code>Var</code>, or whatever else. Even at the lowest level of representation, in the CPU itself, it comes down to being able to ask, is this bit 0 or 1.</p>
+                
+                <p>But.. why would we write that program in the first place? I mean, it can only ever print <code>Ok</code>, barring cosmic rays hitting the CPU, so .. why not just write <code>putStr "Ok"</code> instead of the entire thing? Of course we should! Any programmer who wrote that program for real would be rather silly. So maybe there's no reason to write programs that need to compute?</p>
+                
+                <p>Well.. not quite. We humans like to think about things in various ways, we find it easier to use different ways of thinking for different tasks. Even tho Clark Kent and Superman are the same person, it's probably easier to think of what his job is if you're asked "What is Clark Kent's job?" vs the question "What is Superman's job?". Or we might find it easier to reason about the numbers 1, 2, 4, 8, ... by thinking of them as the powers of 2. Heck, we can't even think about all of the powers of 2 at once without thinking of them as such (or in some other way): there's infinitely many of them, so we can't just keep them all in mind at once, we need some finite concept.</p>
+                
+                <p>But beyond just how we think about things, there's also the matter of incompleteness of thoughts and programs. Not every program is complete and finished, at least if by program we mean something that could run (perhaps in simulation) on an idealized computer like a Turing Machine. Real computers have IO, and it's the I part — the input — that represents a certain incompleteness of the program. A program that reads input is a program waiting to be finished, or at least made more complete, so that some action can happen.</p>
+                
+                <p>So this is the other reason we compute: because we often want, or need, to write incomplete programs — programs that need user input. We do this because the input isn't known when we write the program (such as with a audio player, which doesn't hardcode a single song but takes song files as input), or because the single program needs to run in different times and places with different users, and provide appropriately different answers (as with video games, web servers, etc.).</p>
+                
+                <p>The only way to do that is to write programs which are incomplete, and don't obviously say which actions to perform, but which would become obvious (or more obvious, anyway) when input is provide, by computing.</p>
+                
+                <p>This view of things — that computation is all about making things obvious (and especially, obviousness of equalities) — turns out to be related to quite a number of things. My personal favorite, because it's seemingly unrelated, is Deep Learning as applied to problems like speech recognition, object recognition, etc. In these applications, the goal is to classify an input — let's say an image — into some class like <code>dog</code> or <code>motorcycle</code> or whatever. Why? So that the equations <code>image == Dog</code> is obvious to compute, of course! Just relying on the raw image is not so easy, but if the image could be computed down to a class symbol via a DNN, then the equation would be obvious. We don't usually thing of neural networks as being interpreters for images-as-programs, but that's <em>exactly</em> what they are!</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).<!-- Here's <a href="https://news.ycombinator.com/item?id=8756903">the HN thread</a> if you prefer that mode, and also <a href="http://www.reddit.com/r/programming/duplicates/2pgq72/implementing_language_engine_pluralities_in/">the Reddit threads</a>.--></p>
+                
+            </div>
+        </section>
+    </body>
+</html>

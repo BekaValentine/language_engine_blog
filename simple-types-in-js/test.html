@@ -1,0 +1,36 @@
+<html>
+    <body>
+    </body>
+    <script>
+var Foo = { tag: "Foo" };
+var Bar = { tag: "Bar" };
+
+function prod(a,b) {
+    return { tag: "*", left: a, right: b };
+}
+
+function arr(a,b) {
+    return { tag: "->", arg: a, ret: b };
+}
+
+function judgment_type(a) {
+  if ("Foo" == a.tag || "Bar" == a.tag) {
+      
+      return true;
+      
+  } else if ("*" == a.tag) {
+      
+      return judgment_type(a.left) &amp;&amp; judgment_type(a.right);
+      
+  } else if ("->" == a.tag) {
+      
+      return judgment_type(a.arg) &amp;&amp; judgment_type(a.ret);
+      
+  } else {
+      
+      return false;
+      
+  }
+}
+    </script>
+</html>

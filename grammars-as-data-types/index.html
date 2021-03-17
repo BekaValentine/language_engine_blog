@@ -1,0 +1,383 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Grammars as Data Types</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Grammars as Data Types</h1>
+            <div class="content">
+                <p><em>posted by Beka on 4 July 2015</em></p>
+                
+                <p>An interesting connection between language and computer science exists in a correspondence between grammars and inductively defined data types. I hope the correspondence isn't <em>too</em> unforeseen, but it's still worth making as explicit as possible, to see some variations. I'm going to write this in Haskell, using a bunch of phantom type stuff, but a dependently typed language would be even better suited.</p>
+                
+                <h3>A simple grammar</h3>
+                
+                <p>Let's consider the following grammar for mathematical expressions, which is rather common in these sorts of discussions. The notation I'm using is vaguely BNF, just to have a notational distinction for later.</p>
+                
+                <pre><code>E ::= N
+E ::= E + E
+E ::= E - E
+N ::= 0
+E ::= 1
+E ::= 2
+...</code></pre>
+                
+                <p>This grammar classifies some strings in various ways, but more importantly, it can be seen as defining a class of parse trees. This grammar represents a rewrite system, however, where a start symbol or node is successfully rewritten by expanding it into new symbols or attaching subnodes. That's what the <code>::=</code> means — rewrite the left as the right. But we can turn this around and say, from some things like this, build something like this, like so:</p>
+                
+                <pre><code>N → E
+E + E → E
+E - E → E
+0 → N
+1 → N
+2 → N
+...</code></pre>
+                
+                <p>When we're dealing with just symbols, especially in the non-RE set of grammars, we like to distinguish between terminal and non-terminal symbols, and the distinction is somewhat one of abstraction. The symbols E and N have the property of being classes of different things, they're not just symbols, but they're categories of different sorts of things. This contrasts with the symbols 0, 1, 2, +, -, etc. which are particulars things, not classes of things.</p>
+                
+                <p>The grammar notation in some sense conflates these two, by making them all symbols. So let's force these apart. First, we'll make sure that our grammar is such that any rule's sub-node part (the RHS of the <code>::=</code> notation, the LHS of the <code>→</code> notation) consists of either exact one terminal symbol, or a sequence of non-terminal symbols. The grammar given above doesn't have this property because of the + and - in rules 2 and 3, but we can introduce a new symbol, and a new rule, to make it have this property, like so:</p>
+                
+                <pre><code>N → E
+E Q E → E
+0 → N
+1 → N
+2 → N
+...
++ → Q
+- → Q</code></pre>
+                
+                <p>This just guarantees that the next move we're going to make is possible. That move, now, is to replace these terminal symbol rules with a distinct notation. Instead of writing <code>→</code>, we'll simply write <code>::</code>, to indicate not that the symbol is gotten by rewriting some other symbol, but that the symbol is <em>classified</em> by the other symbol:</p>
+                
+                <pre><code>N → E
+E Q E → E
+0 :: N
+1 :: N
+2 :: N
+...
++ :: Q
+- :: Q</code></pre>
+                
+                <p>Next, we'll give an explicit symbol for the "sequence of symbols" portion. Since sequences are a kind of pair, we'll use the tuple notation of Haskell, so that a sequence <code>A B C</code> becomes <code>(A,B,C)</code>. After all, the sequence <code>A B C</code> acts to classify three items, in order, as an A, a B, and a C, and that's nothing but a 3-tuple.</p>
+                
+                <pre><code>N → E
+(E,Q,E) → E
+0 :: N
+1 :: N
+2 :: N
+...
++ :: Q
+- :: Q</code></pre>
+                
+                <p>Finally, we'll give the arrow rules symbols as well like the terminal symbols. Since we're looking to think of these grammars as classifying parse trees, these rule symbols, and the terminal symbols, constitute the ways of building nodes, and the non-terminal symbols are the labels that the nodes have.</p>
+                
+                <pre><code>NumRule :: N → E
+OpRule :: (E,Q,E) → E
+0 :: N
+1 :: N
+2 :: N
+...
++ :: Q
+- :: Q</code></pre>
+                
+                <p>And what do you know, these look like type signatures for constructors in Haskell! They're not entirely valid constructor type signatures, but only because of what Haskell permits to be constructors. We can rename like so:</p>
+                
+                <pre><code>NumRule :: N → E
+OpRule :: (E,Q,E) → E
+Zero :: N
+One :: N
+Two :: N
+...
+Plus :: Q
+Minus :: Q</code></pre>
+                
+                <p>And now we've got actual type signatures for constructors of three types, <code>E</code>, <code>N</code>, and <code>Q</code>. We can define a data type in Haskell to get these constructors, like so:</p>
+                
+                <pre><code>-- without GADTs
+data E = NumRule N | OpRule (E,Q,E)
+data N = Zero | One | Two | ...
+data Q = Plus | Minus
+
+-- with GADTs, to make the signatures more obvious
+data E where
+  NumRule :: N → E
+  OpRule :: (E,Q,E) → E
+
+data N where
+  Zero :: N
+  One :: N
+  Two :: N
+  ...
+
+data Q where
+  Plus :: Q
+  Minus :: Q</code></pre>
+                
+                <p>The expression "1 + 2" becomes the data <code>OpRule (One, Plus, Two)</code>.</p>
+                
+                <p>The correspondence isn't just for this grammar, either. Obviously the above transformation, from grammar to type signatures, will work for any context-free grammar, and will produce the data type for all and only the appropriate parse trees, where terminal symbols and rules correspond to constructors, and non-terminal symbols correspond to types.</p>
+                
+                <h3>A bit harder</h3>
+                
+                <p>One common thing that linguists do is affix subsymbols — features, as they're called — to their grammatical categories, so that we don't just have two kinds of noun — singular nouns and plural nouns — as distinct symbols but instead a single symbol with a number <em>feature</em> that distinguishes them. For example, we might have some grammar rules like this:</p>
+                
+                <pre><code>cat → N[sg]
+cats → N[pl]</code></pre>
+                
+                <p>Where <code>N[sg]</code> is a structured symbol with a feature <code>sg</code>. This allows us to state things like subject-predicate agreement really easily in the rules, like so:</p>
+                
+                <pre><code>NP[a] VP[a] → S</code></pre>
+                
+                <p>Where the <code>a</code> is a variable standing for the number feature. The use of the variable on both the subject noun phrase symbol and the verb phrase symbol means that this rule can only be used to produce a noun phrase and a verb phrase that have the same number feature, whatever it may be.</p>
+                
+                <p>This of course also lets us propagate features up as well, since a noun phrase should be plural whenever its noun is plural, and so on, and some verbs are specific to particular agreements:</p>
+                
+                <pre><code>N[a] → NP[a]
+meow → V[pl]
+V[a] → VP[a]</code></pre>
+                
+                <p>We can translate this into a Haskell GADT really easily by making the feature a phantom type:</p>
+                
+                <pre><code>-- the phantom types for the features
+data Sg where
+data Pl where
+
+-- the types for the grammar proper
+data N a where
+  Cat :: N Sg
+  Cats :: N Pl
+
+data NP a where
+  JustANoun :: N a -> NP a
+
+data V a where
+  Meow :: V Pl
+
+data VP a where
+  JustAVerb :: V a → VP a
+
+data S where
+  SubjPredAgr :: (NP a, VP a) → S</code></pre>
+                
+                <p>And if you now try to make a sentence, i.e. an element of type <code>S</code>, you'll find you can only produce this one:</p>
+                
+                <pre><code>SubjPredAgr (JustANoun Cats, JustAVerb Meow)</code></pre>
+                
+                <p>That is to say, the sentence "cats meow", but not "cat meow", even tho there is a perfectly good noun <code>Cat</code>. The phantom types code up the features quite nicely and adequately.</p>
+                
+                <h3>More phantom types!</h3>
+                
+                <p>We can take this phantom type nonsense pretty far, in fact. It's unpleasant right now that our rules are split across multiple data types. Instead, it'd be nice to have a single grammar type that represents the rules. We can do this by making the grammatical categories into phantom types as well! We'll move the constructors into a new indexed type like so:</p>
+                
+                <pre><code>-- the phantom types
+data Sg where
+data Pl where
+data N a where
+data NP a where
+data V a where
+data VP a where
+data S where
+
+-- the grammar, represented by a parse tree type
+data Tree a where
+  Cat :: Tree (N Sg)
+  Cats :: Tree (N Pl)
+  JustANoun :: Tree (N a) → Tree (NP a)
+  Meow :: Tree (V Pl)
+  JustAVerb :: Tree (V a) → Tree (VP a)
+  SubjPredAgr :: (Tree (NP a), Tree (VP a)) → Tree S</pre></code>
+                
+                <p>Even tho we've pushed it all into a single type, now, the previous element is still well typed at this new type. All that's changed is the type level.</p>
+                
+                <h3>Deeper into types</h3>
+                
+                <p>One popular alternative to context-free grammars is the equivalent framework of categorial grammars, where instead of lots of rules that define constructors, we instead have some very simple rules, but with more complex types. Typically, this means we have function types of some sort, with a function application rule. Let's look again at our Haskell definitions for the math expression trees, updated to use the parse tree variant:</p>
+                
+                <pre><code>data E where
+data N where
+data Q where
+
+data Tree a where
+  NumRule :: Tree N → Tree E
+  OpRule :: (Tree E, Tree Q, Tree E) → Tree E
+  Zero :: Tree N
+  One :: Tree N
+  Two :: Tree N
+  ...
+  Plus :: Tree Q
+  Minus :: Tree Q</code></pre>
+                
+                <p>You'll notice that we have this type of infix operators, <code>Q</code>, which is used in the <code>OpRule</code> signature to represent "operator application". But operators are a sort of function, just one that happens to appear in between two arguments. Categorial grammars give us two function types — arg on the left and arg on the right functions — and with this, we can say instead that operators are <em>functions</em> that take an argument to the left and an argument to the right.</p>
+                
+                <p>To do this, we'll get rid of the <code>Q</code> type, and add two new types for each kind of function type:</p>
+                
+                <pre><code>-- the old phantom types
+data E where
+data N where
+
+-- the new phantom for functions with the arg to the left
+data a :\: b where
+
+-- the new phantom for functions with the arg to the right
+data a :/: b where</code></pre>
+                
+                <p>We'll now remove <code>OpRule</code>, and replace it with rules for forward and backward function application. We'll also give a new type to the operators <code>Plus</code> and <code>Minus</code></p>
+                
+                <pre><code>data Tree a where
+  ArgFun :: (Tree a, Tree (a :\: b)) → Tree b
+  FunArg :: (Tree (b :/: a), Tree a) → Tree b
+  NumRule :: Tree N → Tree E
+  Zero :: Tree N
+  One :: Tree N
+  Two :: Tree N
+  ...
+  Plus :: Tree (N :\: (E :/: N))
+  Minus :: Tree (N :\: (E :/: N))</code></pre>
+                
+                <p>In this new system, the expression "1 + 2" is now represented by the data <code>FunArg (ArgFun One Plus) Two</code>. The operator <code>Plus</code> first combines with the number to its left using <code>ArgFun</code>, and then the result combines with the number to its right using <code>FunArg</code>.</p>
+                
+                <h3>Better versions still</h3>
+                
+                <p>One observation you might have about the above code is that the things which constitute grammatical categories and grammatical features are themselves just types and they're scattered around, and the grammar rules work for any types, not just ones that represent grammatical categories and features. If we use the Haskell data kind and kind signature extensions, however, we can go further, by having a type of grammatical categories, a type of grammatical features, and by explicitly indexing the trees by data. Here's the little fragment of English:</p>
+                
+                <pre><code>-- honest to goodness grammatical number features
+data Num where
+  Sg :: Num
+  Pl :: Num
+
+-- honest to goodness grammatical categories
+data Cat where
+  N :: Num → Cat
+  NP :: Num → Cat
+  V :: Num → Cat
+  VP :: Num → Cat
+  S :: Cat
+
+-- the grammar, represented by a parse tree type
+data Tree :: Cat → * where
+  Cat :: Tree (N Sg)
+  Cats :: Tree (N Pl)
+  JustANoun :: Tree (N a) → Tree (NP a)
+  Meow :: Tree (V Pl)
+  JustAVerb :: Tree (V a) → Tree (VP a)
+  SubjPredAgr :: (Tree (NP a), Tree (VP a)) → Tree S</pre></code>
+                
+                <p>And here's the better version of the math expression trees:</p>
+                
+                <pre><code>data Cat where
+  E :: Cat
+  N :: Cat
+  (:\:) :: Cat → Cat → Cat
+  (:/:) :: Cat → Cat → Cat
+
+data Tree :: Cat → * where
+  ArgFun :: (Tree a, Tree (a :\: b)) → Tree b
+  FunArg :: (Tree (b :/: a), Tree a) → Tree b
+  NumRule :: Tree N → Tree E
+  Zero :: Tree N
+  One :: Tree N
+  Two :: Tree N
+  ...
+  Plus :: Tree (N :\: (E :/: N))
+  Minus :: Tree (N :\: (E :/: N))</code></pre>
+                
+                <p>Conveniently, the grammar doesn't change at all. The only change is to the categories and features.</p>
+                
+                <p>Another modification we can make is to extract all of the rules that correspond to terminal nodes/words into their own data type like so:</p>
+                
+                <pre><code>data Num where
+  Sg :: Num
+  Pl :: Num
+
+data Cat where
+  N :: Num → Cat
+  NP :: Num → Cat
+  V :: Num → Cat
+  VP :: Num → Cat
+  S :: Cat
+
+-- just the grammar, now
+data Tree :: Cat → * where
+  AWord :: Word a → Tree a
+  JustANoun :: Tree (N a) → Tree (NP a)
+  JustAVerb :: Tree (V a) → Tree (VP a)
+  SubjPredAgr :: (Tree (NP a), Tree (VP a)) → Tree S
+
+-- a type for the lexicon
+data Word :: Cat → * where
+  Cat :: Word (N Sg)
+  Cats :: Word (N Pl)
+  Meow :: Word (V Pl)</pre></code>
+                
+                <pre><code>data Cat where
+  E :: Cat
+  N :: Cat
+  (:\:) :: Cat → Cat → Cat
+  (:/:) :: Cat → Cat → Cat
+
+data Tree :: Cat → * where
+  Word :: Word a → Tree a
+  ArgFun :: (Tree a, Tree (a :\: b)) → Tree b
+  FunArg :: (Tree (b :/: a), Tree a) → Tree b
+  NumRule :: Tree N → Tree E
+
+data Word :: Cat → * where
+  Zero :: Word N
+  One :: Word N
+  Two :: Word N
+  ...
+  Plus :: Word (N :\: (E :/: N))
+  Minus :: Word (N :\: (E :/: N))</code></pre>
+                
+                <p>Separating out the lexicon from the grammar has its advantages, especially for natural language, because we're more likely to change the lexicon by adding new words than we are to change the grammar, improving modularity.</p>
+                
+                <p>If we want to improve modularity even further, we can use data families, instead of just data types, to allow all of these types to be extended in separate modules pertaining to different domains of interest (such as a module for the sub-language of place names, a module for the sub-language of numerical expressions, etc).</p>
+                
+                <h3>Semantics?</h3>
+                
+                <p>This indexing approach also works really well for adding a <em>semantics</em> to our system in a way that ensures everything makes sense. Let's look at the math example of this, but the English version works just as well (tho with fancier stuff going on).</p>
+                
+                <p>What we'll do is define a type family that maps grammatical categories to Haskell types, like so:</p>
+                
+                <pre><code>type family Interp a
+
+type instance Interp E = Int
+type instance Interp N = Int
+type instance (a :\: b) = Interp a → Interp b
+type instance (b :/: a) = Interp a → Interp b</code></pre>
+                
+                <p>And now what we'll do is define an evaluation function that maps parse trees to their corresponding Haskell values, <em>ensuring that the types make sense</em>, and a similar function for words:</p>
+                
+                <p>evaluate :: Tree a → Interp a
+evaluate (AWord w) = lex w
+evaluate (ArgFun x f) = evaluate f (evaluate x)
+evaluate (FunArg f x) = evaluate f (evaluate x)
+evaluate (NumRule t) = evaluate t
+
+lex :: Word a → Interp a
+lex Zero = 0
+lex One = 1
+lex Two = 2
+...
+lex Plus = (+)
+lex Minus = (-)</code></pre>
+                
+                <p>If you're familiar with deeply embedded domain specific languages in Haskell, you'll find all of this familiar, especially the mathematical expression one. The applications to natural language are the same, but with a different DSL that you're embedding.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).</p>
+                
+            </div>
+        </section>
+    </body>
+</html>

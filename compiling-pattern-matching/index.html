@@ -1,0 +1,349 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Compiling Pattern Matching</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Compiling Pattern Matching</h1>
+            <div class="content">
+                <p><em>posted by Beka on 21 September 2015</em></p>
+                
+                <p>Pattern matching is absolutely central to modern functional programming languages, and in the type theoretically informed ones, it forms the basis of all usage of user-defined data. To inspect some piece of data, to extract part of it, etc. is all done by pattern matching. Since it's so central, and so all-permeating, it's a good idea to make it as efficient as possible.</p>
+                
+                <p>A non-optimized pattern matching implementation that just pairs a pattern with a clause, taking the case expression at face value, will be inefficient because it will often do a lot of redundant work. Consider, for instance, this Haskell expression:</p>
+                
+                <pre><code>case foo of
+  (True,True)  -> bar
+  (True,False) -> baz
+  (False,y)    -> quux</code></pre>
+                
+                <p>If we implement this match the <code>foo</code> value to each pattern, we end up looking at the outermost constructor of <code>foo</code> three separate times, each time to see if its the <code>(,)</code> constructor for pairs. But once we've inspected it and know that it's <code>(,)</code> the first time, we never need to look at it again, it's not going to change. Similarly, if we inspect the first element of <code>foo</code> and find that its <code>True</code>, the non-optimized matcher will look at each clause independently, even tho once we find it to be <code>True</code>, we can rule out the third clause entirely.</p>
+                
+                <p>On option for optimizing these is to remove all the nesting of pattern matches, so that we only ever inspect the outmost constructor. Some languages, including Haskell, if I'm not mistaken, take this approach. It's a code-code transformation rather than a deep implementation strategy. So for example, with this expression, we can transform it to the equivalent</p>
+                
+                <pre><code>case foo of
+  (x,y) -> case x of
+    True -> case y of
+      True -> bar
+      False -> baz
+    False -> quux</code></pre>
+                
+                <p>And now if we use the unoptimized matching algorithm, the resulting code is efficient. Some nuance arises when we try to actually <em>define</em> the transformation, because of expressions like this:</p>
+                
+                <pre><code>case foo of
+  (True,True)  -> bar
+  (False,True) -> baz
+  (x,y)        -> quux</code></pre>
+                
+                <p>However, there's another way to implement efficient pattern matching that comes at it from the perspective of treating efficiency as a core component, rather than a code optimization decision. I don't know if this  is a <em>better</em> approach, but it's at least an interesting one, so I figured I'd explain it here.</p>
+                
+                <h3>A hint at a solution?</h3>
+                
+                <p>When I was first thinking about this, I got the idea to play around with defining some kind of "fused" pattern that could represent multiple patterns simultaneously. For instance, if we have the natural number patterns <code>Suc Zero</code> (for 1) and <code>Suc (Suc Zero)<code> (for 2), we could somehow splice them together so that the outer <code>Suc</code> constructor has both <code>Zero</code> and <code>Suc Zero</code> as "alternative" daughters. Something vaguely like <code>Suc (Zero `or` Suc Zero)</code>, which would match 1 and also 2 (so it means "either 1 or 2"). Or we might have something like <code>Suc (Zero `or` Suc (Suc (Zero `or` Suc (Suc Zero))))</code> which matches 1, 3, and 5, and so on Thinking of these patterns as trees (which they are, in an implementation) we have something like this, with dotted lines representing the alternative daughters:</p>
+                
+                [[IMAGES]]
+                
+                <p>We can implement this, and a matcher, pretty easily for natural numbers. Here's an example, without treating data as general trees as we would in an implementation of an actual language:</p>
+                
+                <pre><code>data Nat
+  = Zero
+  | Suc Nat
+
+data NatPattern
+  = ZeroP
+  | SucP NatPattern
+  | AnyNatP
+  | NatChoiceP NatPattern NatPattern
+
+natMatch :: NatPattern -> Nat -> Bool
+natMatch ZeroP Zero
+  = True
+natMatch (SucP p) (Suc n)
+  = natMatch p n
+natMatch AnyNatP _
+  = True
+natMatch (NatChoiceP p p') n
+  = natMatch p n || natMatch p' n</code></pre>
+                
+                <p>This approach seems quite nice, because we can define a function that takes a bunch of patterns that have no use of <code>NatChoiceP</code> and combine them into a minimal patterns with <code>NatChoiceP</code> splicing them together appropriately, so that the following equivalencies hold:</p>
+                
+                <pre><code>NatChoiceP ZeroP ZeroP ≅ ZeroP
+NatChoiceP (SucP p) (SucP p') ≅ SucP (NatChoiceP p p')</code></pre>
+                
+                <p>However, this idea isn't without its fatal flaws. So far, we've only seen what happens with a simple type like <code>Nat</code>, which only has constructors with 0 or 1 argument, but what do we do for a type that has a constructor with multiple arguments? Consider this type:</p>
+                
+                <pre><code>data BinTree
+  = Leaf
+  | Branch BinTree BinTree
+
+data BinTreePattern
+  = LeafP
+  | BranchP BinTreePattern BinTreePattern
+  | AnyBinTreeP
+  | BinTreeChoiceP BinTreePattern BinTreePattern
+
+binTreeMatch :: BinTreePattern -> BinTree -> Bool
+binTreeMatch LeafP Leaf = True
+binTreeMatch (BranchP l r) (Branch l' r')
+  = binTreeMatch l l' &amp;&amp; binTreeMatch r r'
+binTreeMatch AnyBinTreeP _
+  = True
+binTreeMatch (BinTreeChoiceP p p') t
+  = binTreeMatch p t || binTreeMatch p' t</code></pre>
+                
+                <p>When we have a choice between a <code>Leaf</code> and either a <code>Leaf</code> or a <code>Branch</code>, then the corresponding pattern is easy enough: it's just <code>BinTreeChoiceP</code>, but what about when it's a choice between two <code>Branch</code>es?</p>
+                
+                <p>Perhaps what we want is to have the following equivalencies:</p>
+                
+                <pre><code>BinTreeChoiceP LeafP LeafP ≅ LeafP
+BinTreeChoiceP (BranchP l r) (BranchP l' r')
+  ≅ BranchP (BinTreeChoiceP l l') (BinTreeChoiceP r r')</code></pre>
+                
+                <p>But this is <em>definitely</em> wrong, because the choice of <code>l</code> for the left node <em>always</em> goes with the choice of <code>r</code> for the right node in <code>BinTreeChoiceP (BranchP l r) (BranchP l' r')</code>, and similarly for <code>l'</code> and <code>r'</code>. However, in the "equivalent" <code>BranchP (BinTreeChoiceP l l') (BinTreeChoiceP r r')</code>, the choice of the left and right branches is independent. To use a concrete example:</p>
+                
+                <pre><code>tree = Branch Leaf (Branch Leaf Leaf)
+
+pattern1 = BinTreeChoiceP
+             (BranchP LeafP LeafP)
+             (BranchP (BranchP LeafP LeafP) (BranchP LeafP LeafP))
+
+pattern2 = BranchP
+             (BinTreeChoiceP
+                LeafP
+                (BranchP LeafP LeafP))
+             (BinTreeChoiceP
+                LeafP
+                (BranchP LeafP LeafP))</code></pre>
+                
+                <p>If we match <code>tree</code> to each pattern, we get <code>binTreeMatch pattern1 tree == False</code> while <code>binTreeMatch pattern2 tree == False</code>. <code>pattern2</code> will also match the mirror of <code>tree</code>, for a total of 4 matching trees, while <code>pattern1</code> only matches the two in its choice.</p>
+                
+                <p>This really is no surprise. There are many ways to view this that make sense of it, but I think the best way is to realize that multiple arguments produce conjunctive patterns (<code>p</code> has to match <em>and</em> <code>p'</code> has to match) whereas choice produces disjunctive patterns (<code>p</code> has to match <em>or</em> <code>p'</code> has to match), and so since conjunction and disjunction don't commute (<code>(a &amp;&amp; b) || (c &amp;&amp; d)</code> is not the same as <code>(a || c) &amp;&amp; (b || d)</code>). In regular expressions we get the same thing: <code>ab|cd</code> is not the same as <code>(a|c)(b|d)</code>. There's a deeper reason for all of these, of course (having to do with non-commutation of products and coproducts) but the intuition should be clear now.</p>
+                
+                <p>In addition to this problem, there is an even bigger, more fatal problem: we're supposed to be doing pattern matching, not just testing if some piece of data is equal to any of a specified collection. Pattern matching requires we form some kind of lookup, mapping elements of the specified collection to the associated clause. So these "choice" patterns are analogous to sets (<code>Set Nat</code>, <code>Set BinTree</code>), while what we actually need is something more like a map (<code>Map Nat Clause</code>, <code>Map BinTree Clause</code>). As it is, once we've found a matching choice, we have no way of saying what the associated clause is.</p>
+                
+                <h3>The better solution</h3>
+                
+                <p>If we take a look at the types <code>NatPattern</code> and <code>BinTreePattern</code>, ignoring choice now, we can notice that any such pattern defines an "upper" portion of data-as-tree. That is to say, patterns are exactly like values, when viewed as tree structures, except patterns have an "any" label that indicates any such tree can go below it:</p>
+                
+                [[IMAGES]]
+                
+                <p>A piece of data matches a pattern when it has an upper portion thats the same as the pattern. Matching involves traversing the pattern and the data at the same time, making the same traversal moves, as determined by the pattern, and when the labels don't match and the moves can't be made, the data doesn't match the pattern.</p>
+                
+                <p>This provides the key inside we need. We can view matching as <em>simultaneous traversal</em>. Given any pattern, and any fixed traversal order, we can convert the pattern to a list of label names, and then traverse the data with the same order, checking each pattern name in turn. So, for instance, the pattern <code>SucP (SucP ZeroP)</code> would instead be given as, say, <code>[SucPL,SucPL,ZeroPL]</code>, using in-order traversal, and similarly, <code>BranchP LeafP (BranchP LeafP LeafP)</code> would be instead <code>[BranchPL,LeafPL,BranchPL,LeafPL,LeafPL]</code>.</p>
+                
+                <p>While a list of constructor names isn't quite the solution yet, we can see how matching would work in this alternative formulation of patterns:</p>
+                
+                <pre><code>data BinTreePatternCons
+  = LeafC
+  | BranchC
+  | AnyBinTreeC
+
+type BinTreePatternC = [BinTreePatternCons]
+
+binTreeMatchC :: BinTreePatternC -> BinTree -> Bool
+binTreeMatchC p t = go p [t]
+  where
+    go [] [] = True
+    go (LeafC:p) (Leaf:ts)
+      = go p ts
+    go (BranchC:p) (Branch l r:ts)
+      = go p (l:r:ts)
+    go (AnyBinTreeC:p) (t:ts)
+      = go p ts
+    go _ _ = False</code></pre>
+                
+                <p>This uses a typical tail-recursive traversal of a tree on a stack, which is quite easy to implement and which produces an in-order traversal.</p>
+                
+                <p>As I said tho, this isn't the final way we're going to do this, because we still haven't taken choices into account, nor that clauses have to pair with them. But we at least now have a sense of the process. To handle choices, we need to be able to say at any given point, there are some choices of constructors to read next, not just one, and for each option we need to give a traversal. So a traversal becomes a kind of map, from constructor names to traversals. But it can't be just a map, because at some point the traversal has to end, so we'll have two kinds of traversals:</p>
+                
+                <pre><code>data Traversal a
+  = Done
+  | Choice (Map a (Traversal a)
+
+binTreeMatchT :: Traversal BinTreePatternCons -> BinTree -> Bool
+binTreeMatchT p t = go p [t]
+  where
+    go Done [] = True
+    go (Choice m) (Leaf:ts)
+      = goCon m LeafC ts ts
+    go (Choice m) (Branch l r:ts)
+      = goCon m BranchC (l:r:ts) ts
+    go _ _ = False
+    
+    goCon m c ts ts'
+      = case M.lookup c m of
+          Just p | go p ts
+            -> True
+          _ -> case M.lookup AnyBinTreeC m of
+            Just p  -> go p ts'
+            Nothing -> False</code></pre>
+                
+                <p>The auxiliary function <code>go</code> is relatively straight forward: if the pattern traversal wants to end, and there are no more trees to decompose, we've succeeded. On the other hand, if we have a choice, and we can proceed by trying to decompose a tree with a specified constructor, we call the <code>goCon</code> auxiliary function to handle that decomposition. Otherwise, we fail.</p>
+                
+                <p>The auxiliary function <code>goCon</code> is somewhat subtle, however. Because we have variable patterns like <code>AnyBinTreeC</code>, we might find that the pattern doesn't have an option for the specified constructor but it <em>does</em> have a catch-all option. So we need to provide <code>goCon</code> with the stack of trees for both eventualities. For instance, if a tree is <code>Branch l r</code>, we need to proceed by using a stack that has <code>l</code> and <code>r</code> if the pattern can inspects the branch node, but if it can only match with <code>AnyBinTreeC</code>, we don't need to put <code>l</code> and <code>r</code> on the stack.</p>
+                
+                <p>Furthermore, in the case that the constructor <em>does</em> show up in the pattern, that doesn't guarantee that the associated traversal will succeed. If it doesn't, the pattern match as a whole can still succeed because <code>AnyBinTreeC</code> can be tried as an alternative. For example, consider this case expression from earlier:</p>
+                
+                <pre><code>case foo of
+  (True,True)  -> bar
+  (False,True) -> baz
+  (x,y)        -> quux</code></pre>
+                
+                <p>In the first and second cases, the traversals for their patterns can both fail even if a partial match is match. Suppose, for instance, that <code>foo = (True,False)</code>. If we go through the traversal of <code>(True,True)</code>, we'll succeed in matching the pair constructor and then the first <code>True</code>, and then fail at the second <code>True</code>. There is no path through the traversal that goes pair-true-false or even pair-true-any. However there <em>is</em> a path that goes pair-any-any, namely, the third pattern <code>(x,y)</code>. The traversal for this case expression's patterns would look like this, in tree form:</p>
+                
+                <pre><code>(,)
+|
+|-- True
+|   |
+|   |-- True
+|
+|-- False
+|   |
+|   |-- True
+|
+|-- x
+    |
+    |-- y</code></pre>
+                
+                <p>This is why, in the definition of <code>goCon</code>, even if we successfully find a traversal choice that matches the input data's constructor, we have the guard in <code>Just p | go p ts</code> that requires the whole rest of that traversal to succeed before we consider that choice successful.</p>
+                
+                <p>If we now try out this matching function with a traversal, it works exactly the same as a the list version. This is to be expected: when the choice traversals have exactly one choice, the traversal is isomorphic to a list. However, if we have 0 or 2+ alternatives, we get a full set of trees to match.</p>
+                <p>So we've solved the problem of choice in the patterns from earlier, all that remains is to figure out how to pair up the appropriate clauses with their patterns. This is very simple, however. We can augment the <code>Done</code> constructor to carry a <code>Clause</code>, and then augment the <code>binTreeMatchT</code> function to return <code>Maybe Clause</code> instead of a <code>Bool</code>. The change is almost too trivial to bother showing:</p>
+                
+                <pre><code>data Traversal a
+  = Done Clause
+  | Choice (M.Map a (Traversal a))
+  deriving (Show)
+
+binTreeMatchT :: Traversal BinTreePatternCons -> BinTree -> Maybe Clause
+binTreeMatchT p t = go p [t]
+  where
+    go (Done c) [] = Just c
+    go (Choice m) (Leaf:ts)
+      = goCon m LeafC ts ts
+    go (Choice m) (Branch l r:ts)
+      = goCon m BranchC (l:r:ts) ts
+    go _ _ = Nothing
+    
+    goCon m c ts ts'
+      = case M.lookup c m of
+          Just p | Just c &lt;- go p ts
+            -> Just c
+          _ -> case M.lookup AnyBinTreeC m of
+            Just p  -> go p ts'
+            Nothing -> Nothing</code></pre>
+                
+                <p>Lastly, it would be useful to have a way to combine patterns-as-traversals, so that we can take a list of traversals (one for each pattern+clause) and turn them into the appropriate total traversal by combining them one at a time. This is pretty easy:</p>
+                
+                <pre><code>combine :: Ord a => Traversal a -> Traversal a -> Traversal a
+combine (Done c)   (Done c')   = Done c
+combine (Choice m) (Choice m') = Choice (M.unionWith combine m m')</code></pre>
+                
+                <h3>Conclusion/Discussion</h3>
+                
+                <p>Now, obviously a real functional programming language won't be using this <code>BinTree</code> type for data, it'll something more like <code>RoseTree String</code>, where <code>RoseTree</code> is defined as</p>
+                
+                <pre><code>data RoseTree a = RoseTree a [RoseTree a]</code></pre>
+                
+                <p>But the matching function for this is basically the same, if not simpler. Implementation is left as an exercise to the reader.</p>
+                
+                <p>Outside of the domain of implementing a functional programming language, this way of viewing tree structured data has some interesting manifestations. We can step back from the pattern matching and look instead at just data in general encoded this way, and it turns out that in Haskell, we can define a data family that can encode various types. I call it <code>Lin</code> (because this represents a way to linearize or serialize data), and it can come with an encoding and decoding operation:</p>
+                
+                <pre><code>data family Lin a r
+
+class Linearizable a where
+  linearize :: a -> r -> Lin a r
+  delinearize :: Lin a r -> (a,r)</code></pre>
+                
+                <p>The <code>a</code> parameter represents the data type being encoded, and the <code>r</code> parameter represents the "rest" of the data, whatever shows up after the <code>a</code> stuff. On simple data, the definition of <code>Lin</code> is easy, we just wrap up an <code>r</code> in constructors that correspond to the simple data type. For example, on booleans:</p>
+                
+                <pre><code>data instance Lin Bool r where
+  LinBoolTrue :: r -> Lin Bool r
+  LinBoolFalse :: r -> Lin Bool r
+
+instance ShowF (Lin Bool) where
+  showF (LinBool b r) = "LinBool " ++ show b ++ " (" ++ show r ++ ")"
+
+instance Linearizable Bool where
+  linearize True r = LinBoolTrue r
+  linearize False r = LinBoolFalse r
+  delinearize (LinBoolTrue r) = (True,r)
+  delinearize (LinBoolFalse r) = (False,r)</code></pre>
+                
+                <p>For a simple recursive type like <code>Nat</code> the encoding is also simple, except for the recursive constructors, we just have a recursive argument. The <code>r</code> argument is only present for non-recursive constructors.</p>
+                
+                <pre><code>data Nat = Zero | Suc Nat
+
+data instance Lin Nat r where
+  LinNatZero :: r -> Lin Nat r
+  LinNatSuc :: Lin Nat r -> Lin Nat r
+
+instance Linearizable Nat where
+  linearize Zero r = LinNatZero r
+  linearize (Suc n) r = LinNatSuc (linearize n r)
+  delinearize (LinNatZero r) = (Zero,r)
+  delinearize (LinNatSuc nr) = let (n,r) = delinearize nr
+                               in (Suc n, r)</code></pre>
+                
+                <p>But the interesting stuff happens with multiple arguments. Like our traversals, we end up representing compound data in a very weird way, where something that is "after" something else is "inside" that something else. The definition of <code>Lin</code> has constructors corresponding to the encoded data type, but because "after" means "inside", when we have multiple arguments, we put the "later" arguments in the <code>r</code> position of the "earlier" arguments. For instance, pairs:</p>
+                
+                <pre><code>data instance Lin (a,b) r where
+  LinPair :: Lin a (Lin b r) -> Lin (a,b) r
+
+instance (Linearizable a, Linearizable b) => Linearizable (a,b) where
+  linearize (a,b) r = LinPair (linearize a (linearize b r))
+  delinearize (LinPair abr) = let (a,br) = delinearize abr
+                                  (b,r) = delinearize br
+                              in ((a,b),r)</code></pre>
+                
+                <p>Or lists:</p>
+                
+                <pre><code>data instance Lin [a] r where
+  LinNil :: r -> Lin [a] r
+  LinCons :: Lin a (Lin [a] r) -> Lin [a] r
+
+instance Linearizable a => Linearizable [a] where
+  linearize [] r = LinNil r
+  linearize (x:xs) r = LinCons (linearize x (linearize xs r))
+  delinearize (LinNil r) = ([],r)
+  delinearize (LinCons aasr) = let (a,asr) = delinearize aasr
+                                   (as,r) = delinearize asr
+                               in (a:as,r)</code></pre>
+                
+                <p>The most interesting aspect of this, however, is not that this can be done. We ought to expect this can be done, since this is just a variation on the traversal theme where instead of using maps and constructor names and so forth, we define this funky <code>Lin</code> data family. No, what's most interesting is the <em>types of the <code>Lin</code> constructors</em>. Let's define some auxiliary types to make things cleaner:</p>
+                
+                <pre><code>type (~>) f g = forall a. f a -> g a
+type (.:) f g a = f (g a)
+type Id a = a</code></pre>
+                
+                <p>The first can be seen as roughly being the arrow for natural transformations, and the second is roughly functor composition. So what happens when we rewrite the <code>Lin</code> constructors with these?</p>
+                
+                <pre><code>LinBoolTrue :: Id ~> Lin Bool
+LinBoolFalse :: Id ~> Lin Bool
+LinBoolZero :: Id ~> Lin Nat
+LinBoolSuc :: Lin Nat ~> Lin Nat
+LinBoolPair :: Lin a .: Lin b ~> Lin (a,b)
+LinBoolNil :: Lin [a]
+LinBoolCons :: Lin a .: Lin [a] ~> Lin [a]</code></pre>
+                
+                <p>These look suspiciously like the types (in category theoretic form) of the constructors of the types that are being encoded. Replace functorial arrows <code>~></code> correspond to type arrows <code>-></code>, functorial composition <code>.:</code> corresponds to pairing <code>(,)</code>.</p>
+                
+                <p>I don't quite know what the right categorial treatment of this is, but it seems to be that <code>Lin</code> is a functor from <code>|Set</code> to <code>|Set^|Set</code> that somehow preserves algebras in some way?</p>
+                
+            </div>
+        </section>
+    </body>
+</html>

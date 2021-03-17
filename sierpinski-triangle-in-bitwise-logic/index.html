@@ -1,0 +1,265 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Sierpinski Triangle in Bitwise Logic</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Sierpinski Triangle in Bitwise Logic</h1>
+            <div class="content">
+                <p><em>posted by Beka on 27 May 2015</em></p>
+                
+                <!-- GRAPHIC CODE -->
+	            <div style="width:700px;">
+	                <div style="float:left;margin:5px;border:3px solid lightblue">
+	                    <canvas id="graphic" width="512" height="512"></canvas>
+	                </div>
+	                <div style="float:right;margin:5px;">
+	                    
+	                    Scaling: <input id="scaling"
+	                                    type="number"
+	                                    value="1"
+	                                    onchange="updateScaling(1*this.value)"
+	                                    min="0"
+	                                    step="0.002"
+	                                    style="width:50px"><br>
+ 	                        &nbsp;&nbsp;Animation: <input id="scalingAnimation"
+ 	                                                      type="number"
+ 	                                                      value="0"
+ 	                                                      onchange="setScalingAnimation(1*this.value)"
+ 	                                                      step="0.002"
+ 	                                                      style="width:50px"><br><br>
+ 	                        
+	                    Cycle height: <input id="cycleHeight"
+	                                         type="number"
+	                                         value="512"
+	                                         onchange="updateCycleHeight(1*this.value)"
+	                                         min="0"
+	                                         step="0.5"
+	                                         style="width:50px"><br>
+	                        &nbsp;&nbsp;Animation: <input id="cycleHeightAnimation"
+	                                                      type="number"
+	                                                      value="0"
+	                                                      onchange="setCycleHeightAnimation(1*this.value)"
+	                                                      step="0.5"
+	                                                      style="width:50px"><br><br>
+	                        
+	                    Phase: <input id="phase"
+	                                  type="number"
+	                                  value="0"
+	                                  onchange="updatePhase(1*this.value)"
+	                                  style="width:50px"><br>
+	                        &nbsp;&nbsp;Animation: <input id="phaseAnimation"
+	                                                      type="number"
+	                                                      value="0"
+	                                                      onchange="setPhaseAnimation(1*this.value)"
+	                                                      style="width:50px"><br><br>
+	                        
+	                    Sample ratio: <input id="sampleRatio"
+	                                         type="number"
+	                                         value="1"
+	                                         onchange="updateSampleRatio(1*this.value)"
+	                                         style="width:50px"><br>
+	                        &nbsp;&nbsp;Animation: <input id="sampleRatioAnimation"
+	                                                      type="number"
+	                                                      value="0"
+	                                                      onchange="setSampleRatioAnimation(1*this.value)"
+	                                                      step="0.01"
+	                                                      style="width:50px"><br><br>
+	                        
+	                    Threshold: <input type="number"
+	                                      value="1"
+	                                      onchange="updateThreshold(1*this.value)"
+	                                      min="0"
+	                                      max="255"
+	                                      style="width:50px"><br><br>
+	                    
+	                    Operation:<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(falsity)" value="falsity">false<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(nor)" value="nor">nor<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(notImpliedBy)" value="notImpliedBy">not implied by<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(notLeft)" value="notLeft">not left<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(notImplies)" value="notImplies">not implies<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(notRight)" value="notRight">not right<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(xor)" value="xor">xor<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(nand)" value="nand">nand<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(and)" value="and" checked>and<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(iff)" value="iff">iff<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(right)" value="right">right<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(implies)" value="implies">implies<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(left)" value="left">left<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(impliedBy)" value="impliedBy">implied by<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(or)" value="or">or<br>
+	                    &nbsp;&nbsp;<input type="radio" name="operation" onclick="updateOperation(truth)" value="truth">truth
+	                </div>
+	                <div style="clear:both;"></div>
+	                <script type="text/javascript">
+	            
+                		function neg(bits) { return ~bits << 1 >>> 1; }
+	            
+                		function falsity(a,b) { return 0; }
+                		function nor(a,b) { return neg(a | b); }
+                		function notImpliedBy(a,b) { return neg(a) & b; }
+                		function notLeft(a,b) { return neg(a); }
+                		function notImplies(a,b) { return a & neg(b); }
+                		function notRight(a,b) { return neg(b); }
+                		function xor(a,b) { return (a & neg(b)) | (neg(a) & b); }
+                		function nand(a,b) { return neg(a & b); }
+                		function and(a,b) { return a & b; }
+                		function iff(a,b) { return (a & b) | (neg(a) & neg(b)); }
+                		function right(a,b) { return b; }
+                		function implies(a,b) { return b | neg(a); }
+                		function left(a,b) { return a; }
+                		function impliedBy(a,b) { return a | neg(b); }
+                		function or(a,b) { return a | b; }
+                		function truth(a,b) { return neg(0); }
+	            
+                		var graphicState = {
+                		    operation: and,
+                		    scaling: 1,
+                		    cycleHeight: 512,
+                		    phase: 0,
+                		    sampleRatio: 1,
+                		    threshold: 1
+                		}
+	            
+                		function drawBWPixel(data,dataIndex,color) {
+                		    data[dataIndex] = color;
+                			data[dataIndex+1] = color;
+                			data[dataIndex+2] = color;
+                			data[dataIndex+3] = 255;
+                		}
+	            
+                		function drawGraphic() {
+                		    var canvas = document.getElementById('graphic');
+                            var ctx = canvas.getContext('2d');
+                            var imageData = ctx.getImageData(0,0,canvas.width, canvas.height);
+                            var data = imageData.data;
+                            console.log(graphicState.cycleHeight);
+                            for (var row = 0; row < canvas.width; row++) {
+                		        for (var col = 0; col < canvas.height; col++) {
+                				    var v = graphicState.operation(graphicState.sampleRatio*row,graphicState.sampleRatio*col);
+                					var dataIndex = 4*col + 4*canvas.width*row;
+                					var color = graphicState.cycleHeight === 0 ?
+                					              graphicState.scaling*v+graphicState.phase :
+                					              (graphicState.scaling*v+graphicState.phase)%graphicState.cycleHeight;
+		        		
+                					if (graphicState.threshold !== 0) {
+                					    color = color < graphicState.threshold ? 0 : 255;
+                				    }
+		        		
+                					drawBWPixel(data,dataIndex,color);
+                				}
+                			}
+		        
+                			ctx.putImageData(imageData, 0, 0);
+                		}
+	            
+                		function updateScaling(a) {
+                		    graphicState.scaling = a;
+                		    drawGraphic();
+                		}
+                		function setScalingAnimation(delta) {
+                		    clearInterval(graphicState.scalingAnimation);
+	            
+                		    if (delta !== 0) {
+                		        graphicState.scalingAnimation = setInterval(function () {
+                		            graphicState.scaling += delta;
+                		            
+                		            if (graphicState.scaling <= 0) {
+                		                clearInterval(graphicState.scalingAnimation);
+                		                graphicState.scaling = 0;
+                		                document.getElementById("scalingAnimation").value = graphicState.scaling;
+                		            }
+                		            
+                		            document.getElementById("scaling").value = graphicState.scaling;
+                		            drawGraphic();
+                		        }, 100);
+                		    }
+                		}
+	            
+                		function updateCycleHeight(b) {
+                		    graphicState.cycleHeight = b;
+                		    drawGraphic();
+                		}
+                		function setCycleHeightAnimation(delta) {
+                		    clearInterval(graphicState.cycleHeightAnimation);
+	            
+                		    if (delta !== 0) {
+                		        graphicState.cycleHeightAnimation = setInterval(function () {
+                		            graphicState.cycleHeight += delta;
+                		            
+                		            if (graphicState.cycleHeight <= 0) {
+                		                clearInterval(graphicState.cycleHeightAnimation);
+                		                graphicState.cycleHeight = 0;
+                		                document.getElementById("cycleHeightAnimation").value = graphicState.cycleHeight;
+                		            }
+                		            
+                		            document.getElementById("cycleHeight").value = graphicState.cycleHeight;
+                		            drawGraphic();
+                		        }, 100);
+                		    }
+                		}
+	            
+                		function updatePhase(t) {
+                		    graphicState.phase = t;
+                		    drawGraphic();
+                		}
+                		function setPhaseAnimation(delta) {
+                		    clearInterval(graphicState.phaseAnimation);
+	            
+                		    if (delta !== 0) {
+                		        graphicState.phaseAnimation = setInterval(function () {
+                		            graphicState.phase += delta;
+                		            document.getElementById("phase").value = graphicState.phase;
+                		            drawGraphic();
+                		        }, 100);
+                		    }
+                		}
+	            
+                		function updateSampleRatio(s) {
+                		    graphicState.sampleRatio = s;
+                		    drawGraphic();
+                		}
+                		function setSampleRatioAnimation(delta) {
+                		    clearInterval(graphicState.sampleRatioAnimation);
+	            
+                		    if (delta !== 0) {
+                		        graphicState.sampleRatioAnimation = setInterval(function () {
+                		            graphicState.sampleRatio += delta;
+                		            document.getElementById("sampleRatio").value = graphicState.sampleRatio;
+                		            drawGraphic();
+                		        }, 100);
+                		    }
+                		}
+	            
+                		function updateThreshold(th) {
+                		    graphicState.threshold = th;
+                		    drawGraphic();
+                		}
+                		function updateOperation(op) {
+                		    graphicState.operation = op;
+                		    drawGraphic();
+                		}
+	            
+                		drawGraphic();
+	            
+                	</script>
+	            </div>
+	            <!-- END GRAPHIC CODE -->
+            </div>
+        </section>
+    </body>
+</html>

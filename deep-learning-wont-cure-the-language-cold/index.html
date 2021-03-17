@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Deep Learning Won't Cure The Language Cold</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Deep Learning Won't Cure the Language Cold</h1>
+            <div class="content">
+                <p><em>posted by Beka on 5 Jan 2015</em></p>
+                
+                <p>Every once in a while I get asked about what sort of machine learning I used to build Language Engine, and when I say I didn't use any, the response is something like "But deep learning is so big these days!" While I'm tempted to just pull a Peter Thiel and say this buzzword-y nonsense is just fashion, and suggest you avoid fashions like the plague, I want to explain a bit instead. So in this post, I'm going to elaborate on how deep learning relates to Language Engine, and why we don't use it, or any other kind of machine learning, and why future versions will only use minimal amounts.</p>
+                
+                <h3>Deep Learning, Roughly</h3>
+                
+                <p>Before jumping into that, however, it'll be good to discuss deep learning from a birds-eye view. So, what is deep learning, exactly? In a way, deep learning is a way of building a bucket sort program, only the algorithm discovers the buckets for you. Given a bunch of input data, you train a deep learning neural network on the data, and out comes the buckets that work best to group the input data. Later, during the usage of the network, you feed novel data in, and out comes a bucket identifier.</p>
+                
+                <p>For example, you might train your deep learning neural network on a collection of images of cats and dogs, and it will automatically discover, on its own, that there are two useful buckets it can categorize things into: "cat" and "dog" (or maybe something else, who knows!). Later, you take a picture you've never seen before, show it to the network, and it will tell you either "cat" or "dog", depending on which choice it considers most probably.</p>
+                
+                <p>Let me repeat the main point for emphasis: <b><em>deep learning sorts things into buckets that it discovers automatically</em></b>.</p>
+                
+                <h3>Natural Language</h3>
+                
+                <p>Now, the fundamental problem that Language Engine solves is: how can we extract useful structured representations of meaning from natural language input, so that host applications can use this to respond appropriately via actions, etc. With this in mind, how might we use deep learning? One option would be to use the whole sentence as input, and use deep learning to categorize the sentences based on some kind of "intent". Maybe it's a "turn-on-the-lights" intent, or a "send-a-tweet" intent. Regardless, this is a very coarse-grained approach.</p>
+                
+                <p>How many intents are there? How many meanings of English are there? As many as there are sentences: infinitely many. So if we wanted to use such a coarse-grained approach, the results would be useful only up to a point. Any aspects of the meaning that isn't as granular as that will be lost. We only have so many buckets. We can increase the to get more and more detail, but this becomes increasingly hard to use: we get one intent, or one "meaning" for each sentence, and they're all different! Infinitely many buckets is just as useless as very few buckets.</p>
+                
+                <p>So what's the right solution? Structured meaning. It's not enough to know that "John saw Susan" goes in Bucket A, and "Stephen saw Michael" goes in Bucket B. It's not even enough to know that Bucket A and Bucket B are similar to one another. What you really need, to properly understand what this sentence means, is what the <em>structure</em> is: what are the parts of the sentence, their meaning, and how do these meanings relate to one another to form a cohesive whole?</p>
+                
+                <p>A good analogy for programmers is, well, programs. The parts of a program mean things, and the meaning of the whole program comes from the meanings of the parts. You can categorize programs into buckets like "sorting function" or "web server", but that's not enough to understand any given program, nor is it enough to <em>run</em> a program. If we want to "run" sentences of natural language as if they're little programs telling a computer what to do, we need the same structural richness that programs have, hence Language Engine.</p>
+                
+                <h3>But isn't there some way to...</h3>
+                
+                <p>All of this is not to say that there is no use for machine learning at all. Quite the contrary, there's plenty of use, especially down the road! Right now, the best applications of machine learning, including deep learning, to natural language involves uses the bucketing tools to determine most-likely parses. Natural language, you may have heard, has lots of ambiguity. That is to say, there might be many parses for the same string of words, so which is the "right" parse? Work by Socher, Bauer, Manning, and Ng (2013) (<a href="http://aclweb.org/anthology/P/P13/P13-1045.pdf">here</a>) uses deep learning for precisely this purpose, and perhaps similar techniques can be used on semantic representations to make it even more powerful.</p>
+                
+                <p>But that's down the road. Before Socher et al. could bolt deep learning onto context free grammars, someone had to <em>invent</em> the idea of context free grammars, and explain how to use them to represent sentence structures. So before you can apply your deep learning algos to meaning, you have to have a structured meaning to use, and that's what Language Engine provides.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).<!-- Here's <a href="">the HN thread</a> if you prefer that mode, and also <a href="">the Reddit threads</a>.--></p>
+                
+            </div>
+        </section>
+    </body>
+</html>

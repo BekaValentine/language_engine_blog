@@ -1,0 +1,274 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Precedence with Haskell</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Precedence with Haskell</h1>
+            <div class="content">
+                <p><em>posted by Beka on 17 July 2015</em></p>
+                
+                <p>I want to summarize an approach to precedence (for pretty printing and parsing) that I've recently come up with in part of a series of blog posts I'm writing. It's useful enough, I think, to separate out into it's own post, because precedence is such a constant thorn in people's sides.</p>
+                
+                <p>The approach I'm going to outline here is, as far as I know, novel. It has normal precedence numbers as a special case, but as we'll see, it turns out to be more general. We'll take as our starting point the following grammar in fake-BNF, and an associated data type, for mathematical expressions:</p>
+                
+                <pre><code>e ::= v | e + e | e - e | e * e
+v ::= 0 | 1 | ...</code></pre>
+                
+                <pre><code>data Exp = Lit Integer | Plus Exp Exp | Minus Exp Exp | Times Exp Exp</code></pre>
+                
+                <p>There is a common way of expressing when parentheses are required, which is to simply give examples of when they can be omitted. For example, we might say that <code>X + Y + Z</code> means <code>X + (Y + Z)</code> for any choice of <code>X</code>, <code>Y</code>, and <code>Z</code>. What's going on here, as I see it, is that we're implicitly talking about syntactic locations — in this case, the position of the right argument to <code>+</code> — and saying that some expressions can be deparenthesized in certain locations.</p>
+                
+                <p>Let's state explicitly what the parenthesizations are for our little language. We'll do it in the form of a table, just to keep it all tidy. The header row will have the general shape of an expression of interest, with an underscore for the location we're considering. The rows will correspond to each kind of expression, and we'll put a ✓ in a cell if the row's expression can appear in the column's location without parens.</p>
+                
+                <table>
+                    <tr>
+                        <td></td>
+                        <td>_ + e</td>
+                        <td>e + _</td>
+                        <td>_ - e</td>
+                        <td>e - _</td>
+                        <td>_ * e</td>
+                        <td>e * _</td>
+                    </tr>
+                    <tr>
+                        <td>v</td>
+                        <td>✓</td>
+                        <td>✓</td>
+                        <td>✓</td>
+                        <td>✓</td>
+                        <td>✓</td>
+                        <td>✓</td>
+                    </tr>
+                    <tr>
+                        <td>e + e</td>
+                        <td></td>
+                        <td>✓</td>
+                        <td>✓</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td>e - e</td>
+                        <td>✓</td>
+                        <td></td>
+                        <td>✓</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td>e * e</td>
+                        <td>✓</td>
+                        <td>✓</td>
+                        <td>✓</td>
+                        <td>✓</td>
+                        <td>✓</td>
+                        <td></td>
+                    </tr>
+                </table>
+                
+                <p>This expresses the idea that <code>+</code> is right associative (<code>X + Y + Z = X + (Y + Z)</code>), that <code>-</code> is left associative (<code>X - Y - Z = (X - Y) - Z</code>) and that it <code>+</code> and <code>-</code> interact so that <code>X - Y + Z = (X - Y) + Z</code> and also <code>X + Y - Z = (X + Y) - Z</code>. It also expresses that <code>*</code> is left associative (<code>X * Y * Z = (X * Y) * Z</code>) and that it binds tighter than <code>+</code> and <code>-</code> as usual.</p>
+                
+                <p>The associativity of <code>+</code> is chosen just to make this example interesting later on. If by <code>+</code> we mean addition, then the choice is irrelevant, but in general the choice matters, so I choose right associativity to make for an interesting example.</p>
+                
+                <p>If we abstract away from operators a little bit, we might instead phrase the idea more generally as, for example, <code>X + Y</code> means <code>X + (Y)</code> whenever <code>Y</code> is in the set of expressions that can omit parens as the right arg of <code>+</code>. This is almost tautological, until we imagine that these facts are coded as data.</p>
+                
+                <p>What we'll do now, to construct a pretty printer along these lines, is as follows: firstly, we'll define a data type of syntactic locations, including one location called <code>Root</code>, which represents when the location inside no other locations (i.e. at the root of an abstract syntax tree). Secondly, we'll define a function for pretty printing that is parameterized by the position of the term being pretty printed. As a first pass, I'm going to steal the general structure from Andrej Bauer's <a href="https://github.com/andrejbauer/plzoo/blob/master/src/calc/syntax.ml">plzoo pretty printer</a>, but we're going to aim at building something a little cleaner.</p>
+                
+                <h3>The code</h3>
+                
+                <p>So here's our data type of locations:</p>
+                
+                <pre><code>data Loc = Root
+         | PlusL | PlusR
+         | MinusL | MinusR
+         | TimesL | TimesR
+  deriving (Eq)</code></pre>
+                
+                <p>Nothing magical about that, hopefully. But now we're going to replicate Bauer's pretty printing function, or at least the part he called <code>to_str</code>. We will not locations from the case expression tho, by analogy to Bauer's. Instead we will return <emph>lists of locations</emph> that represent where the given expression may be de-parenthesized. To make it clean, we'll have two functions, <code>prettyLoc</code>, which corresponds to Bauer's <code>to_str</code>, and <code>prettyAux</code> which is just a useful abstraction for keeping the code clean.</p>
+                
+                <pre><code>prettyAux :: Exp -> ([Loc],String)
+prettyAux (Lit n)
+  = ( [Root,PlusL,PlusR,MinusL,MinusR,TimesL,TimesR]
+    , show n
+    )
+prettyAux (Plus l r)
+  = ( [Root,PlusR,MinusL]
+    , prettyLoc PlusL l ++ " + " ++ prettyLoc PlusR r
+    )
+prettyAux (Minus l r)
+  = ( [Root,PlusL,MinusL]
+    , prettyLoc MinusL l ++ " - " ++ prettyLoc MinusR r
+    )
+prettyAux (Times l r)
+  = ( [Root,PlusL,PlusR,MinusL,MinusR,TimesL]
+    , prettyLoc TimesL l ++ " * " ++ prettyLoc TimesR r
+    )
+
+prettyLoc :: Loc -> Exp -> String
+prettyLoc loc e = let (locs, str) = prettyAux e
+                   in if loc `elem` locs
+                      then str
+                      else "(" ++ str ++ ")"</code></pre>
+                
+                <p>The <code>prettyAux</code> function simply calls <code>prettyLoc</code> on the subexpressions with their locations. For instance, the <code>Plus l r</code> case calls <code>prettyLoc PlusL l</code> because the subexpression <code>l</code> is in the <code>PlusL</code> location, and so forth. It also returns, for each constructor, the list of locations where its parens can be omitted. This list is exactly the columns in the table from earlier that have ✓s in them. So you'll notice that the <code>Minus l r</code> case returns <code>[Root,PlusL,MinusR]</code> and the table earlier had ✓'s for the <code>e - e</code> row in the columns <code>_ + e</code> and <code>e - _</code>. The <code>Root</code> location is included for all of these of course. We can abstract this out later using <code>Maybe</code>, but for now I put it in because it reads better.</p>
+                
+                <p>Our <code>prettyLoc</code> function just does one simple thing: it calls <code>prettyAux</code> and then asks if the input location (i.e. the location in the whole expression that <code>prettyLoc</code> was called from) is among the locations that are given as places the expression can omit parens. If it is, then we simply return the string from <code>prettyAux</code>, but if it's not, then we add parens.</p>
+                
+                <p>To pretty print in general, we simply define</p>
+                    
+                <pre><code>prettyPrint :: Exp -> String
+prettyPrint = prettyLoc Root</code></pre>
+                
+                <h3>As a type class</h3>
+                
+                <p>At this point, it makes sense to abstract out as much as we can into a type class:</p>
+                
+                <pre><code>class Eq l => Pretty a l | a -> l where
+  prettyAux :: a -> ([l], String)
+
+prettyLoc :: Pretty a l => Maybe l -> a -> String
+prettyLoc Nothing e
+  = snd (prettyAux e)
+prettyLoc (Just loc) e
+  = let (locs, str) = prettyAux e
+    in if loc `elem` locs
+       then str
+       else "(" ++ str ++ ")"
+
+prettyPrint :: Pretty a l => a -> String
+prettyPrint = prettyLoc Nothing</code></pre>
+                
+                <p>Here we'll pretend that <code>Loc</code> above didn't have <code>Root</code> — notice we're using <code>Maybe</code> for <code>prettyLoc</code>, so that the root node is represented by <code>Nothing</code> for all possibly location types.</p>
+                
+                <p>The instance for <code>Exp</code> is</p>
+                
+                <pre><code>instance Pretty Exp Loc where
+  prettyAux (Lit n)
+    = ( [PlusL,PlusR,MinusL,MinusR,TimesL,TimesR]
+      , show n
+      )
+  prettyAux (Plus l r)
+    = ( [PlusR,MinusL]
+      , prettyLoc (Just PlusL) l ++ " + " ++ prettyLoc (Just PlusR) r
+      )
+  prettyAux (Minus l r)
+    = ( [PlusL,MinusL]
+      , prettyLoc (Just MinusL) l ++ " - " ++ prettyLoc (Just MinusR) r
+      )
+  prettyAux (Times l r)
+    = ( [PlusL,PlusR,MinusL,MinusR,TimesL]
+      , prettyLoc (Just TimesL) l ++ " * " ++ prettyLoc (Just TimesR) r
+      )</code></pre>
+                
+                <h3>Possible further generalizations</h3>
+                
+                <p>I'm inclined to say that we can go further still. Obviously we can abstract out the list of locations into its own type class. But the more interested part is the recursive use of <code>prettyLoc</code>. There's some kind of algebra-like thing lurking here. If we had a type <code>ExpF</code> like so:</p>
+                
+                <pre><code>data ExpF r = Lit Int | Plus r r | Minus r r | Times r r</code></pre>
+                
+                <p>Then the recursive cases are just the obvious <code>fmap</code>, only <emph>not quite</code> because the function that's getting mapped is parameterized by the position of the recursive use. Perhaps there's some generalization of functor algebras that can be made here, as this isn't a new thing — mapping with an index or key is commonplace.</p>
+                
+                <p>Even without being able to do this, however, it seems plausible that this could be turned into a derivable (collection of) type classes.</p>
+                
+                <h3>Precedence numbers</h3>
+                
+                <p>I mentioned in the intro that this was a generalization of precedence numbering, but it's not immediately obvious how. First, let's consider why some special cases of this can be coded as numbers. You'll notice that the lists of locations that <code>prettyAux</code> returns have some overlap. These lists represent sets of location names, so of course there is often going to be some overlap, as there are 2<sup>|<code>Loc</code>|</sup> subsets we could've chosen from.</p>
+                
+                <p>Occasionally, we will pick location lists that are totally ordered by the subset relation, so that for any two expressions <code>X</code> and <code>Y</code>, the locations of <code>X</code> are a subset of the locations of <code>Y</code>, or vice versa, or the same, but <emph>never</emph> are they ordered relative to one another. In exactly these situations we can assign numbers to each unique subset, and recover the precedence numbering that Bauer gives in his plzoo example.</p>
+                
+                <p>However, not all parenthesization rules are total orderings. In fact, the example one given above is not, and there's no way to assign it a precedence numbering. This is because in <emph>some</emph> contexts, <code>e - e</code> can be deparenthesized while <code>e + e</code> cannot (namely, in the location <code>_ + e</code>), while in some other contexts, <code>e + e</code> can be deparenthesized while <code>e - e</code> cannot (namely, in the location <code>e + _</code>). Sometimes <code>+</code> should have higher precedence and sometimes <code>-</code> should, and it depends on the context of use.</p>
+                
+                <p>So using explicit location names, rather than precedence numbers, is a strictly more expressive variant. It's not clear to me whether precedence numbers + associativity declarations (like Haskell's fixity) is equivalent to this technique, but I suspect not, because that only applies to infix operators (tho these two techniques might be equivalent in that domain).</p>
+                
+                <h3>Non-ambiguity condition</h3>
+                
+                <p>Because this whole thing is intended to explain when it's possible to omit parentheses, the choices above are all subject to the condition that they don't produce ambiguous results. We can test this by looking at all of the cells in the above table that have ✓s and inserting the expressions into the locations. If any two produce the same string, the rules are ambiguous and won't be usable.</p>
+                
+                <p>If we do this with the above table, we get the strings</p>
+                
+                <pre><code>v + e
+e + v
+v - e
+e - v
+v * e
+e * v
+e + e + e
+e + e - e
+e - e - e
+e * e + e
+e + e * e
+e * e - e
+e - e * e
+e * e * e</code></pre>
+                
+                <p>which you'll notice are all distinct. Therefore the above omission rules are usable, and there are no ambiguities.</p>
+                
+                <h3>Parsing</h3>
+                
+                <p>I also mentioned earlier that this technique is useful for parsing. The separation of the syntax into expressions and locations can be directly translated into parsers as well. We'll have two major classes of parsers for the above language — expression-specific and location specific. That is to say, each kind of expression will get its own parser (a literal parser, a plus parser, a minus parser, a times parser), and each location will <emph>also</emph> get its own parser.</p>
+                
+                <p>To handle optional parenthesization, the location parsers will list all of the expressions that can appear without parens, along with a parens parser to catch the rest.</p>
+                
+                <p>Here's the full parser for the above language:</p>
+                
+                <pre><code>symbol_ :: String -> GenParser Char st ()
+symbol_ s = do _ &lt;- string s &lt;* spaces
+               return ()
+
+tryOrElse :: [GenParser a st b] -> GenParser a st b -> GenParser a st b
+tryOrElse []     e = e
+tryOrElse (p:ps) e = try p &lt;|> tryOrElse ps e
+
+op :: (Exp -> Exp -> Exp)
+   -> String
+   -> GenParser Char st Exp
+   -> GenParser Char st Exp
+   -> GenParser Char st Exp
+op f s lp rp = do l &lt;- lp
+                  symbol_ s
+                  r &lt;- rp
+                  return (f l r)
+
+-- each kind of expression
+literal = Lit . read &lt;$> many1 digit
+plus  = op Plus "+" plusL plusR
+minus = op Minus "-" minusL minusR
+times = op Times "*" timesL timesR
+
+-- and each kind of location
+plusL  = tryOrElse [parenthesized,minus] literal
+plusR  = tryOrElse [parenthesized,plus] literal
+minusL = tryOrElse [parenthesized,plus,minus,times] literal
+minusR = tryOrElse [parenthesized,times] literal
+timesL = tryOrElse [parenthesized,times] literal
+timesR = try parenthesized &lt;|> literal
+
+parenthesized = between (symbol_ "(") (symbol_ ")") expression
+root = tryOrElse [parenthesized,plus,minus,times] literal</code></pre>
+                
+                <p>Actually, we don't want to use this parser as is, because it's left-recursive and will go into a loop, but never mind that for now.</p>
+                
+                <p>You can see from this that the parser is cleanly segmented into parts that correspond exactly to the various kinds of expressions and locations. The arguments to the numerous <code>tryOrElse</code>s are exactly the appropriate expression types for those locations, with <code>parenthesized</code> thrown in: anything can appear there parenthesized, plus also some other things. Note that the alternatives are always given in order of specificity — if we put <code>literal</code> earlier than <code>times</code>, for instance, we might never reach <code>times</code> because <code>literal</code> can succeed and Parsec doesn't backtrack through alternatives. So we just order them correctly to avoid this.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).</p>
+                
+            </div>
+        </section>
+    </body>
+</html>

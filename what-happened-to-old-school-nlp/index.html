@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - What Happened to Old School NLP?</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>What Happened to Old School NLP?</h1>
+            <div class="content">
+                <p><em>posted by Beka on 11 Jan 2015</em></p>
+                
+                <em>Disclaimer: This is my personal take on things, not necessarily an accurate history of the field. Take it with a huge grain of salt!</em>
+
+<p>For the last 25 or so years, NLP has consisted almost entirely of fairly simple statistical models of language have prevailed. Rather than using carefully build grammars and fancy parsers, rather than trying to build systems that rely on linguistics, instead modern NLP tries to learn as much as possible from scratch. NLP research is now, essentially, just a branch of machine learning rather than a branch of linguistics. What happened?</p>
+
+<p>Well, a number of things. Perhaps the most important was the discovery of money. Prior to about 25 years ago, most NLP research was academic, but with the advent of computers, it became possible to monetize NLP and the priority shifted to making products people would buy, rather than a system that was scientifically correct. Good beat Better, because Good was available now, while Better was in the future.</p>
+
+<p>One of the main problems with old-school NLP was that hand-building grammars was really hard and time consuming. That kind of work requires professionals which requires money, and the business-oriented nature of the new NLP meant you want to avoid that if possible. So while you may need that for doing <em>science</em> of language, the <em>business</em> of language just doesn't care at all.</p>
+
+<p>Another problem with hand-building grammars is that language is vast, and it's very easy to miss huge chunks of it. The Cambridge Grammar of the English Language, widely cited as one of the most complete grammars of English, is well over 1000 pages, and even then it has lots of missing parts. Now, admittedly, CGEL has a lot of verse, and if you compressed it into a context-free grammar in Backus-Naur Form, you'd probably have something that was maybe 20 or 30 pages long, but that's still a pretty hefty grammar to have to build by hand. If it were a complete grammar if English it'd be even longer, maybe twice as long or more? It's hard to say.</p>
+
+<p>Furthermore, what even is English? Should "ain't" be in your canonical grammar of English, or not? What about dialects of English where it's perfectly normal to say things like "I might could go" (found in Appalachian dialects and even as far south as parts of Texas), or dialects where you can say "I go there anymore" to mean "I still go there" (found in some midwestern dialects)? And this is just American English, never mind other dialects. Do we put all that in, or not? Where's the boundary?</p>
+
+<p>These issues make it very appealing to use computers to build systems automatically, or if possible, avoid building them entirely. The avoidance solution worked best. Most of the problems that made money, as opposed to being scientifically interesting, were things that didn't obviously require sophisticated analyses to begin with, things like spam detection or book-review sentiment analysis. Even something like machine translation, which is notoriously bad, is still good enough — sure it's not a great translation but you can get the gist, which is all you need usually (just don't use it for legal documents!).</p>
+
+<h3>Example: Sentiment Analysis</h3>
+
+<p>Let's take the sentiment analysis example. It's a good starting hypothesis that book reviews will tend to include more words like "good", "great", "love", etc if the review is a positive one, and more words like "bad", "awful", "hate", etc. if the review is a negative one. Even tho you can say things like "this book wasn't good" to create a negative review, there will probably be a tendency to just say "this book was bad" instead.</p>
+
+<p>So a simple technique for sentiment analysis is to use word-count vectors. Given training data consisting of reviews that are known to be positive or negative for certain (maybe by star ratings on Amazon or whatever), you separate them out into the positive group and the negative group, and then compile word counts for each. The word "good" appears 500 times, "the" appears 2000 times, etc.</p>
+
+<p>For any given review, now, you can compare it's vector of word counts against the two vectors from the training phase, and pick whichever is closer as the "correct" review category, positive or negative. Since these are word count vectors, you typically do something like measuring the angle between the vectors, ignoring the scaling factor (the training data has many reviews, but the given review is just one, so everything will be scaled up).</p>
+
+<p>Now you have a simple sentiment analyzer, with no fancy grammars, not even Markov chains, just word counts. And you know what? It works better than flipping a coin, so that's something. You can sell more books with 55% correct than you can with 50%, so it doesn't matter that it's not perfect. The obvious next step is to do this for bigrams and trigrams and so on, until the marginal payoff isn't big enough. If you <em>really</em> want to go nuts, you throw these vectors into a fancy deep learning network!</p>
+
+<p>This approach will work very well for sorting reviews into positive or negative buckets, way better than fancier, old-school approaches. No reliance on grammars, no parsing, no nothing, just a big pile of training data. The more data you have, the better it gets.</p>
+
+<h3>Example: Primitive Semantics</h3>
+
+<p>You can even do some seemingly magical things like rudimentary semantic analysis like this. Suppose also that have some kind of analyzer for identifying noun phrases in a sentence and classifying them as "person", "place", "time", "object", etc. or even better, as "human", "animal", "plant", "building", "park", "household object", etc. Google's produced lots of research papers on this sort of thing. Now with both of these, you can do some pretty interesting primitive semantics.</p>
+
+<p>Simply extract the classifications for the noun phrases and form a vector. For instance, the sentence "John threw the ball to Susan" might correspond to the vector</p>
+
+<pre><code>noun_phrase_1 = person
+noun_phrase_2 = object
+noun_phrase_3 = person</code></pre>
+
+<p>Now strip out those noun phrases and create a vector of the rest of the sentence. Do this for a large enough data set, and you'll find some interesting trends. For instance, you'll probably see a lot of verbs like "throw", "give", etc. showing up frequently in association with the above vector, but not verbs like "run" and "fall". Words like "the" will be about the same for each (actually maybe 2x more common for the 3-noun-phrase cases than the 1-noun-phrase case because "the" shows up in noun phrases).</p>
+
+<p>You can begin to classify verbs now into groups, and when a new verb comes in, you can make a pretty good guess which group it belongs to. If you now label these groups things like "transference", you can get a rough sketch of the meaning of a sentence. You can even guess the meaning of sentences that use new, previously unseen verbs. It won't be perfect, but it's better than nothing!</p>
+
+<h3>Prognostication</h3>
+
+<p>Now, as it happens, if you have some syntactic information you can actually do sentiment analysis and entity extraction even better, but you'd only try that if your simple approach starts hitting a limit. There are serious laws of diminishing returns here — each % point of improvement requires larger data sets than the previous % point, and eventually you run out of data. But you put off doing that until you have to. Which, incidentally, is happening now.</p>
+
+<p>If you consider the primitive semantics example above, you can see that it'll start to fall apart as soon as you have multiple verbs. You can add windows around the verbs, only looking at maybe 2 or 3 noun phrases in either direction, but that'll start to break once you start relating verbs to one another (e.g. temporally with "before" in the sentence "John blew on the coffee before drinking it") or using verbs inside of noun phrases (e.g. "the woman who runs the space station visited the planet below").</p>
+
+<p>As AI and NLP become more and more prominent, and as comprehension and reasoning become important tasks, the kinds of structural information that is used for learning will become richer and richer. We'll start to see the re-emergence of tools from old-school NLP, but now augmented with the powerful statistical tools and data-oriented automation of new-school NLP. IBM's Watson already does this to some extent.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).<!-- Here's <a href="https://news.ycombinator.com/item?id=8756903">the HN thread</a> if you prefer that mode, and also <a href="http://www.reddit.com/r/programming/duplicates/2pgq72/implementing_language_engine_pluralities_in/">the Reddit threads</a>.--></p>
+                
+            </div>
+        </section>
+    </body>
+</html>

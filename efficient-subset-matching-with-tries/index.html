@@ -1,0 +1,596 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Efficient Subset Matching with Tries</title>
+        <style>
+            table {
+                border-collapse: collapse;
+            }
+            tr {
+                border-top: 1px solid black;
+                border-bottom: 1px solid black;
+            }
+            td {
+                padding: 5px;
+            }
+            .current-cell {
+                border: 3px solid black;
+            }
+            .header-row {
+                background-color: #DDDDDD;
+            }
+            .pattern-cell {
+                background-color: #BBDDEE;
+            }
+            .input-cell {
+                background-color: #FF9955;
+            }
+            .eliminated td {
+                background-color: #666666;
+                border: none;
+            }
+        </style>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Efficient Subset Matching with Tries</h1>
+            <div class="content">
+                <p><em>posted by Beka on 13 July 2015</em></p>
+                
+                <p>For the dispatcher in the Language Engine JS library, it was necessary to be able to efficiently test a number of pre-defined sets for subset status of an arbitrary given set. In particular, the pre-defined subsets are the keyword argument name patterns, and the arbitrary given set is the set of actual keyword argument names. To implement this efficiently, I designed a nice little algorithm using tries, which I'm going to describe below (only using Haskell, not JavaScript).</p>
+                
+                <h3>The problem</h3>
+                
+                <p>Language Engine translates the meanings of sentences into descriptions of the events that the sentences describe. For example, the sentence "Brutus stabbed Caesar" can be thought of as being translated into a description <code>Stabbed(stabber = Brutus, stabbee = Caesar)</code>, which intentionally looks like a keyword argument function call.</p>
+                
+                <p>A command such as "move the file to Foo" might therefore look something like <code>Move(mover = Computer, moved = TheFile, destination = Foo)</code>, which should then be passed along to the host app to be handled. It's also useful to be able to specify different arguments. For instance, "copy the file" vs. "copy the file to the desktop", where the former implicit just means copy it right here, while the second means put a copy on the desktop. So it's necessary to handle <code>Copy</code> when it's specified with just the keyword code>original</code>, but also with the keyword <code>destination</code>.</p>
+                
+                <p>In general, then, the problem is, for each "function", eg. <code>Move</code>, <code>Copy</code>, etc., store a mapping from sets of keywords to handler functions to call. For <code>Copy</code> we might store <code>{original} -> f, {original,destination} -> g</code>. But if we simply stored a simple map from sets (or lists, rather) to functions, then it's plausible that in general, the lookup could get inefficient.</p>
+                
+                <p>Additionally, we don't want to be very strict with keywords as well. If we have an event with keywords <code>{a,b,c}</code> and we have a pattern of keywords <code>{a,b}</code>, it would be good to be able to handle this, as a kind of fall-through. That is, we don't want to require the pattern keywords to be exactly the actual ones, just a subset, so that we can handle special-case commands with general-case patterns.</p>
+                
+                <p>The number of subsets of n keywords is 2<sup>n</sup>, so it'd be good if we could have efficient lookup, and using subset matching instead of exact set matching only increases the number of possible matches, so efficiency is obviously quite important here.</p>
+                
+                <h3>An abstract solution</h3>
+                
+                <p>The solution I used can be described first abstractly, to make the gist of it clear. The first move we want to make, since we're going to implement the sets as lists, is to sort all the lists of interest and make sure their elements are unique. This creates a canonical representation of any given set, so that we only ever have to make reference to a single representation instead of managing equivalences.</p>
+                
+                <p>The second move we're going to make is to imagine all of the possible subsets, and their associated values, forming a table. We don't make use of this table except to guide the design of the implementation, but it's useful to have. Each keyword-cell will be filled in if the keyword set has that keyword, and left empty otherwise. So for example, the above example with <code>original</code> and <code>destination</code> would correspond to the table</p>
+                
+                <p>
+                    <table>
+                        <tr class="header-row">
+                            <td>original</td>
+                            <td>destination</td>
+                            <td>handler</td>
+                        </tr>
+                        <tr>
+                            <td class="pattern-cell"></td>
+                            <td></td>
+                            <td>f</td>
+                        </tr>
+                        <tr>
+                            <td class="pattern-cell"></td>
+                            <td class="pattern-cell"></td>
+                            <td>g</td>
+                        </tr>
+                    </table>
+                </p>
+                
+                <p>Here's a more complex, abstract collection of keywords and mappings, just to help visualize a situation with many options:</p>
+                
+                <p>
+                    <table>
+                        <tr class="header-row">
+                            <td>a</td><td>b</td><td>c</td><td>d</td><td>handler</td>
+                        </tr>
+                        <tr>
+                            <td class="pattern-cell"></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td>H<sub>0</sub></td>
+                        </tr>
+                        <tr>
+                            <td class="pattern-cell"></td>
+                            <td></td>
+                            <td></td>
+                            <td class="pattern-cell"></td>
+                            <td>H<sub>1</sub></td>
+                        </tr>
+                        <tr>
+                            <td></td>
+                            <td class="pattern-cell"></td>
+                            <td class="pattern-cell"></td>
+                            <td></td>
+                            <td>H<sub>2</sub></td>
+                        </tr>
+                        <tr>
+                            <td></td>
+                            <td class="pattern-cell"></td>
+                            <td></td>
+                            <td class="pattern-cell"></td>
+                            <td>H<sub>3</sub></td>
+                        </tr>
+                        <tr>
+                            <td></td>
+                            <td></td>
+                            <td class="pattern-cell"></td>
+                            <td class="pattern-cell"></td>
+                            <td>H<sub>4</sub></td>
+                        </tr>
+                    </table>
+                </p>
+                
+                <p>Just looking at a table like this, you can probably see some of where this is going. To match a set of keywords against this, let's say the keywords <code>[a,c,d]</code>, we'll make a new row, above the label row, for these:</p>
+                
+                <table>
+                    <tr>
+                        <td class="input-cell"></td>
+                        <td></td>
+                        <td class="input-cell"></td>
+                        <td class="input-cell"></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr class="header-row">
+                        <td>a</td><td>b</td><td>c</td><td>d</td><td>handler</td>
+                    </tr>
+                    <tr>
+                        <td class="pattern-cell"></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td>H<sub>0</sub></td>
+                    </tr>
+                    <tr>
+                        <td class="pattern-cell"></td>
+                        <td></td>
+                        <td></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>1</sub></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td class="pattern-cell"></td>
+                        <td class="pattern-cell"></td>
+                        <td></td>
+                        <td>H<sub>2</sub></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td class="pattern-cell"></td>
+                        <td></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>3</sub></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td></td>
+                        <td class="pattern-cell"></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>4</sub></td>
+                    </tr>
+                </table>
+                
+                <p>We'll then look at the cells of the rows from left to right. Looking at the <code>a</code>column, we see that some patterns require it (the first two), and the rest don't require it. <code>a</code> is present in the input, so the match so far says that each pattern is a subset of the input:</p>
+                
+                <table>
+                    <tr>
+                        <td class="input-cell current-cell"></td>
+                        <td></td>
+                        <td class="input-cell"></td>
+                        <td class="input-cell"></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr class="header-row">
+                        <td class="current-cell">a</td><td>b</td><td>c</td><td>d</td><td>handler</td>
+                    </tr>
+                    <tr>
+                        <td class="pattern-cell current-cell"></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td>H<sub>0</sub></td>
+                    </tr>
+                    <tr>
+                        <td class="pattern-cell current-cell"></td>
+                        <td></td>
+                        <td></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>1</sub></td>
+                    </tr>
+                    <tr>
+                        <td class="current-cell"></td>
+                        <td class="pattern-cell"></td>
+                        <td class="pattern-cell"></td>
+                        <td></td>
+                        <td>H<sub>2</sub></td>
+                    </tr>
+                    <tr>
+                        <td class="current-cell"></td>
+                        <td class="pattern-cell"></td>
+                        <td></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>3</sub></td>
+                    </tr>
+                    <tr>
+                        <td class="current-cell"></td>
+                        <td></td>
+                        <td class="pattern-cell"></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>4</sub></td>
+                    </tr>
+                </table>
+                
+                <p>The logic of this step is: the pattern cell matches if both it and the input are on, or the pattern cell is off (independent of the input cell).</p>
+                
+                <p>Moving to the next column, we see that the third and fourth rows have their cells on, but the input doesn't have this cell on:</p>
+                
+                <table>
+                    <tr>
+                        <td class="input-cell"></td>
+                        <td class="current-cell"></td>
+                        <td class="input-cell"></td>
+                        <td class="input-cell"></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr class="header-row">
+                        <td>a</td><td class="current-cell">b</td><td>c</td><td>d</td><td>handler</td>
+                    </tr>
+                    <tr>
+                        <td class="pattern-cell"></td>
+                        <td class="current-cell"></td>
+                        <td></td>
+                        <td></td>
+                        <td>H<sub>0</sub></td>
+                    </tr>
+                    <tr>
+                        <td class="pattern-cell"></td>
+                        <td class="current-cell"></td>
+                        <td></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>1</sub></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td class="pattern-cell current-cell"></td>
+                        <td class="pattern-cell"></td>
+                        <td></td>
+                        <td>H<sub>2</sub></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td class="pattern-cell current-cell"></td>
+                        <td></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>3</sub></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td class="current-cell"></td>
+                        <td class="pattern-cell"></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>4</sub></td>
+                    </tr>
+                </table>
+                
+                <p>We can therefore eliminate these rows entirely from the rest of the match process:</p>
+                
+                <table>
+                    <tr>
+                        <td class="input-cell"></td>
+                        <td class="current-cell"></td>
+                        <td class="input-cell"></td>
+                        <td class="input-cell"></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr class="header-row">
+                        <td>a</td><td class="current-cell">b</td><td>c</td><td>d</td><td>handler</td>
+                    </tr>
+                    <tr>
+                        <td class="pattern-cell"></td>
+                        <td class="current-cell"></td>
+                        <td></td>
+                        <td></td>
+                        <td>H<sub>0</sub></td>
+                    </tr>
+                    <tr>
+                        <td class="pattern-cell"></td>
+                        <td class="current-cell"></td>
+                        <td></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>1</sub></td>
+                    </tr>
+                    <tr class="eliminated">
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td>H<sub>2</sub></td>
+                    </tr>
+                    <tr class="eliminated">
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td>H<sub>3</sub></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td class="current-cell"></td>
+                        <td class="pattern-cell"></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>4</sub></td>
+                    </tr>
+                </table>
+                
+                <p>Moving on to the <code>c</code>column now, we find every remaining row matches:</p>
+                
+                <table>
+                    <tr>
+                        <td class="input-cell"></td>
+                        <td></td>
+                        <td class="input-cell current-cell"></td>
+                        <td class="input-cell"></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr class="header-row">
+                        <td>a</td><td>b</td><td class="current-cell">c</td><td>d</td><td>handler</td>
+                    </tr>
+                    <tr>
+                        <td class="pattern-cell"></td>
+                        <td></td>
+                        <td class="current-cell"></td>
+                        <td></td>
+                        <td>H<sub>0</sub></td>
+                    </tr>
+                    <tr>
+                        <td class="pattern-cell"></td>
+                        <td></td>
+                        <td class="current-cell"></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>1</sub></td>
+                    </tr>
+                    <tr class="eliminated">
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td>H<sub>2</sub></td>
+                    </tr>
+                    <tr class="eliminated">
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td>H<sub>3</sub></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td></td>
+                        <td class="pattern-cell current-cell"></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>4</sub></td>
+                    </tr>
+                </table>
+                
+                <p>And now the last column, again, everything matches:</p>
+                
+                <table>
+                    <tr>
+                        <td class="input-cell"></td>
+                        <td></td>
+                        <td class="input-cell"></td>
+                        <td class="input-cell current-cell"></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr class="header-row">
+                        <td>a</td><td>b</td><td>c</td><td class="current-cell">d</td><td>handler</td>
+                    </tr>
+                    <tr>
+                        <td class="pattern-cell"></td>
+                        <td></td>
+                        <td></td>
+                        <td class="current-cell"></td>
+                        <td>H<sub>0</sub></td>
+                    </tr>
+                    <tr>
+                        <td class="pattern-cell"></td>
+                        <td></td>
+                        <td></td>
+                        <td class="pattern-cell current-cell"></td>
+                        <td>H<sub>1</sub></td>
+                    </tr>
+                    <tr class="eliminated">
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td>H<sub>2</sub></td>
+                    </tr>
+                    <tr class="eliminated">
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td>H<sub>3</sub></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td></td>
+                        <td class="pattern-cell"></td>
+                        <td class="pattern-cell current-cell"></td>
+                        <td>H<sub>4</sub></td>
+                    </tr>
+                </table>
+                
+                <p>So we can use handlers H<sub>0</sub>, H<sub>1</sub>, and H<sub>4</sub>. We'd prefer the most specific one, so we have to pick either H<sub>1</sub> or H<sub>4</sub>. In cases like this, the implementation for Language Engine just picks the first one arbitrarily, but in practice, you should always set up your handlers so that this never even arises.</p>
+                
+                <h3>The trie solution</h3>
+                
+                <p>In practice, the possible keywords are not easily delimited. In fact, essentially any key is a possible key. So we can never build a full table for all possibilities and just insert rows appropriately, as it would have infinitely many columns. Instead, we're given just some (sort) list of keywords.</p>
+                
+                <p>The first observation we'll make to get to the trie solution is to realize that each pattern/row has a "first-on" column, and for any input, all the columns to its left (i.e. with keywords sorted lower than the first-on column of the pattern) are irrelevant to the pattern.</p>
+                
+                <p>The second observation is that we can collapse rows whenever their first-on columns are the same, at least locally. For instance, we don't need to test if the <code>a</code> column is on twice, we should really only test it once, for both handlers H<sub>0</sub> and H<sub>1</sub>.</p>
+                
+                <p>What we will do then is construct a trie, with nodes labeled by handlers or nothing, and the edges labeled by the <emph>successive</emph> keywords in the pattern. That is to say, the first node will have edges labeled by the first keywords in each pattern, and second nodes will have the second keywords in the corresponding patterns, and so forth.</p>
+                
+                <p>The trie for the above abcd table is</p>
+                
+                ...
+                
+                <p>Let's define the type of tries in Haskell:</p>
+                
+                <pre><code>data Trie k a = Node (Maybe a) (M.Map k (Trie k a))</code></pre>
+                
+                <p>We'll need a way to build tries, as well. It's inconvenient to build them by hand. So what we'll do is define some utility functions, one that builds trivial tries, and then a function that merges tries, so we can merge all the rows into one big trie.</p>
+                
+                <pre><code>simpleTrie :: Ord k => [k] -> a -> Trie k a
+simpleTrie []     a = Node (Just a) M.empty
+simpleTrie (k:ks) a = Node Nothing (M.fromList [(k, simpleTrie ks a)])
+
+
+merge :: Ord k => [Trie k a] -> Trie k a
+merge = foldl' aux (Node Nothing M.empty)
+  where
+    aux (Node ma ns) (Node ma' ns')
+      = Node (maybe ma' Just ma)
+             (M.unionWith aux ns ns')</code></pre>
+                
+                <p>If we now code up each pattern row, and then merge them together, we get exactly what we expect:</p>
+                
+                <pre><code>h0 = simpleTrie ["a"]     "H0"
+h1 = simpleTrie ["a","d"] "H1"
+h2 = simpleTrie ["b","c"] "H2"
+h3 = simpleTrie ["b","d"] "H3"
+h4 = simpleTrie ["c","d"] "h4"
+tableTrie = merge [h0,h1,h2,h3,h4]</code></pre>
+                
+                <p>Next, we'll need a way to do lookups. A normal lookup of a sequence of keys would be easy, but that's not what we need. Firstly, we need to do a lookup that implements the above subset algorithm. Secondly, it needs to collect up all of the non-empty node labels and the paths to them, so that at the end, we can see which keyword sets matched and which handlers they correspond to.</p>
+                
+                <p>We'll approach each of these in turn, starting with just doing a boolean lookup, to see if a list of keywords matches any branch of the trie using the above algorithm.</p>
+                
+                <pre><code>follow :: Ord k => [k] -> Trie k a -> Bool
+
+-- when the path is finished, but node empty, we don't match
+follow [] (Node Nothing  _) = False
+
+-- when the path is finished, and the node has a value, we match
+follow [] (Node (Just _) _) = True
+
+-- when the path isn't empty, we recurse
+follow ks (Node ma ns)
+  = M.foldrWithKey
+      (\k t r -> r ||                    -- for each each, drop the initial
+        case dropWhile (&lt; k) ks of       -- part of the path that's definitely
+          [] -> False                    -- &lt; the key. if the path is then empty
+          k':ks'                         -- it doesnt match, otherwise we follow
+            | k == k'   -> follow ks' t  -- the rest of the path on the subtrie
+            | otherwise -> False)        -- so long as the next keys match
+      (case ma of { Nothing -> False ; Just _ -> True })
+      ns</code></pre>
+                
+                <p>This process of dropping all the keywords that are &lt; the edge's label is basically just a way of handling all of the left-most empty cells in one go to skip to these cells:</p>
+                
+                <table>
+                    <tr>
+                        <td class="input-cell"></td>
+                        <td></td>
+                        <td class="input-cell"></td>
+                        <td class="input-cell"></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr class="header-row">
+                        <td>a</td><td>b</td><td>c</td><td>d</td><td>handler</td>
+                    </tr>
+                    <tr>
+                        <td class="pattern-cell current-cell"></td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td>H<sub>0</sub></td>
+                    </tr>
+                    <tr>
+                        <td class="pattern-cell current-cell"></td>
+                        <td></td>
+                        <td></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>1</sub></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td class="pattern-cell current-cell"></td>
+                        <td class="pattern-cell"></td>
+                        <td></td>
+                        <td>H<sub>2</sub></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td class="pattern-cell current-cell"></td>
+                        <td></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>3</sub></td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td></td>
+                        <td class="pattern-cell current-cell"></td>
+                        <td class="pattern-cell"></td>
+                        <td>H<sub>4</sub></td>
+                    </tr>
+                </table>
+                
+                <p>The drop constructs the appropriate subset of the input that we're matching. If the first element of the particular subset is equal to the specified cell symbol, they match, as in the first, second, and fifth cases. If not, as in cases three and four, the match for that particular alternative fails.</p>
+                
+                <p>To capture the path, and the node, we need to only make some slight modifications:</p>
+                
+                <pre><code>follow :: Ord k => [k] -> Trie k a -> [(a, [k])]
+follow ks t = aux [] ks t
+  where
+    -- when the path is finished, but node empty, we don't match
+    aux ps [] (Node Nothing  _) = []
+    
+    -- when the path is finished, and the node has a value, we match
+    aux ps [] (Node (Just a) _) = [(a,reverse ps)]
+    
+    -- when the path isn't empty, we recurse
+    aux ps ks (Node ma ns)
+      = M.foldrWithKey
+          (\k t r -> r ++
+            case dropWhile (&lt; k) ks of
+              [] -> []
+              k':ks'
+                | k == k'   -> aux (k:ps) ks' t
+                | otherwise -> [])
+          (case ma of { Nothing -> [] ; Just a -> [(a,ps)] })
+          ns</code></pre>
+                
+                <p>Here we've pulled the function into an auxiliary function, and added an argument that accumulates the matched keywords. At each matching node, we capture the current keywords and the node value.</p>
+                
+                <p>We now just need to take an arbitrary found pair (assuming there is one) with maximal length of the matched keyword set, and the associated value is the found value. If we had been storing appropriate functions at the nodes, we could build up a keyword-value map and give it to the function. However these details are relatively obvious and also less interesting.</p>
+                
+                <h3>Comments</h3>
+                
+                <p>This process could be done equivalently (and perhaps more efficiently?) using a regular expression because the trie is equivalent to a non-deterministic finite state machine. We can also of course apply various standard techniques for optimizing tries.</p>
+                
+                <p>I'm going to discuss another way to use tries, to efficiently compile pattern matches on algebraic data.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).</p>
+                
+            </div>
+        </section>
+    </body>
+</html>

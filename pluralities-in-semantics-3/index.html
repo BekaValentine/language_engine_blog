@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Pluralities in Semantics (part 3)</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Pluralities in Semantics</br>(part 3)</h1>
+            <div class="content">
+                <p><em>posted by Beka on 14 Dec 2014</em></p>
+                
+                <p>As promised <a href="/blog/pluralities-in-semantics-2">last time</a>, we can now tackle the problem of representing pluralities. Once we have events and adverbial modifiers separated off as in</p>
+                
+                <p class="code">
+                    drink(e,stephen,coffee) &amp; time(e,past) &amp; time(e,today)
+                </p>
+                
+                <p>it becomes relatively trivial to propose that we do the very same thing to the arguments of verb predicates, as well. There are a number of alternative ways to do this, but one option is to have special relations associated with the predicate. So for instance, instead of</p>
+                
+                <p class="code">
+                    drink(e,stephen,coffee)
+                </p>
+                
+                <p>we might instead represent this meaning as</p>
+                
+                <p class="code">
+                    drink(e) &amp; drinker(e,stephen) &amp; drinkee(e,coffee)
+                </p>
+                
+                <p>This approach is called "thematic separation" (the roles of drinker and drinkee are called "thematic roles" for historical reasons), and was proposed by Héctor-Neri Castañeda. Semantics that employs thematic separation is often called "neo-Davidsonian" because its an updated version of Davidson's original event semantics.</p>
+                
+                <p>Let's consider again the example of "John and Susan lifted the crate", on the one reading where they lifted the crate together because it would be too heavy for either of them alone. With this new approach to even participants, we can give this sentence the meaning</p>
+                
+                <p class="code">
+                    lift(e) &amp; lifter(e,john) &amp; lifter(e,susan) &amp; liftee(e,crate)
+                </p>
+                
+                <p>The fact that they are both engaged in the very same act of lifting, rather than distinct acts, is captured by the reuse of the same event. The possibility of expressing this situation with sentences like "John lifted the crate with Susan" is easily captured now, because each participant can be connected with the event independently: the subject "John" contributes</p>
+                
+                <p class="code">
+                    lifter(e,john)
+                </p>
+                
+                <p>while the adverbial "with Susan" contributes</p>
+                
+                <p class="code">
+                    lifter(e,susan)
+                </p>
+                
+                <p>Because there's no set of participants, as in the original flawed proposal, there's no mystery how both of these noun phrases can contribute to the same participant role in this sort of event.</p>
+                
+                <p>But I also mentioned sentences such as "the Starfuries surrounded the vessel", which very strongly push us towards a collective interpretation. It would be weird, tho certainly not logically impossible, to say that each of the Starfuries surrounded the vessel, since Starfuries are pretty small. What we envision is that the Starfuries are positioned in such a way that the vessel can't escape. Again we can assign a meaning to this relatively easily using the neo-Davidsonian method:</p>
+                
+                <p class="code">
+                    surround(e) &amp; surrounder(e,sf0) &amp; surrounder(e,sf1) &amp; surrounder(e,sf2) &amp; surroundee(e,vessel)
+                </p>
+                
+            </div>
+        </section>
+    </body>
+</html>

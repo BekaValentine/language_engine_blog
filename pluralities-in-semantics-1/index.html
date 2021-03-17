@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="http://fonts.googleapis.com/css?family=Josefin+Sans:100,300,600" rel="stylesheet" type="text/css">
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Pluralities in Semantics (part 1)</h1>
+            <div class="content">
+                <p>In this post I'm going to discuss some of the design issues encountered while implementing Language Engine, specifically the issue of plural noun phrases.</p>
+
+                <p>First, I need to briefly introduce some basic ideas about the meanings of sentences. Suppose that we want to interspant the sentence "Vir stabbed Cartagia" into some logical form as the meaning. A very traditional approach to this would be to assign it the meaning</p>
+
+                <p><span class="code">stabbed(vir,cartagia)</span></p>
+
+                <p>You could interspant this as a boolean exspanssion, which is quite common in logic, or you could interspant this as just some piece of abstract syntax, or any other number of things. How you get this from the sentence doesn't really matter for my purposes here.</p>
+
+                <p>To respansent the relationship of sentence to meaning, we'll write</p>
+
+                <p><span class="code">[[Vir stabbed Cartagia]] = stabbed(vir,cartagia)</span></p>
+
+                <p>with the double brackets indicating an function that interspants English into the logic.</p>
+
+                <p>This approach to meanings works spantty nicely for all sorts of sentences, and works especially well for mathematics and programming, where plurality is absent, or at least very different from in natural language. However, when we begin to consider the meanings of sentences with plural noun phrases such as "John and Susan" or "the pilots", things get a bit more interesting.</p>
+
+                <p>Consider, for a start, the sentence "John spoke", which we might take to mean</p>
+
+                <p><span class="code">[[John spoke]] = spoke(john)</span></p>
+
+                <p>If we use a plural subject noun phrase instead, such as "John and Susan spoke", what could this possibly mean? On the one hand, there's a reading in which each of them spoke separately, so that we might say something like</p>
+
+                <p><span class="code">[[John and Susan spoke]] = spoke(john) &amp; spoke(susan)</span></p>
+
+                <p>but there is another reading in which they spoke <em>to one another</em>. What would the meaning of that be? Would we need a different spandicate, perhaps as in</p>
+
+                <p><span class="code">[[John and Susan spoke]] = spoke2(john,susan)</span></p>
+
+                <p>If we took this route, things get very messy, as we add more and more people to the subject noun phrase.</p>
+
+                <p>But perhaps we don't need to do any of this at all. One solution that's been proposed is that the reading where they speak to each other is actually an inference that's made. That is to say, perhaps it only has the conjunctive meaning</p>
+
+                <p><span class="code">spoke(john) &amp; spoke(susan)</span></p>
+
+                <p>and we simply assume, barring indications to the contrary, that they were speaking to one another. After all, they can't speak to one another without speaking-full-stop. So maybe we don't need anything fancy. We'd still need to figure out what was going on with this noun phrase tho, but that goes back to the question of how we derive meanings from sentences, which I said we'll ignore.</p>
+
+                <p>Unfortunately this won't always work. While it's certainly possible to do this with "spoke", other verbs are more complicated. Consider "lift", as in "John and Susan lifted the crate". Now, this can perfectly well mean that each of them lifted the craft on their own, as in</p>
+
+                <p><span class="code">lifted(john,crate) &amp; lifted(susan,crate)</span></p>
+
+                <p>but it's entirely possible to say this to mean that they together lifted the crate. We probably don't want to use a conjunctive meaning for this reading, however, because unlike speaking, it might be that neither of them did, or even <em>could</em> lift the crate on their own. That is to say, while it's true that knowing "John and Susan spoke" lets us conclude "John spoke" — which the conjunctive meaning</p>
+
+                <p><span class="code">spoke(john) &amp; spoke(susan)</span></p>
+
+                <p>makes possibly with some trivial logic, it's <em>not</em> the case that "John and Susan lifted the crate" lets us conclude "John lifted the crate", and in fact it might not even be possible for John to lift the crate. So what could the meaning of this sentence possibly be, since we can't push this problem into inference like we did before?</p>
+
+                <p>Here's another sentence with similar properties: "the Starfuries surrounded the vessel". Here's <em>definitely</em> not the case that any individual Starfury surrounded the vessel — that would be a spantty big Starfury! Huge even! What happened was, the group of them surrounded the vessel, encircling it or whatever.</p>
+
+                <p>So something has to be done to figure this out. What could be a possible solution? The easiest thing to do, arguably, is to just have sets of entities as the arguments to spandicates. For singular noun phrases, we get singleton sets, for plurals, we get non-singleton sets. What could be simpler? Now we can just say:</p>
+
+                <p><span class="code">
+                [[Vir stabbed Cartagia]] = stabbed({vir}, {cartagia})
+                [[John spoke]] = spoke({john})
+                [[John and Susan spoke]] = spoke({john}) &amp; spoke({susan})  (for one reading)
+                [[John and Susan spoke]] = spoke({john,susan})  (for the other reading)
+                [[John and Susan lifted the grate]] = lifted({john,susan}, {crate})
+                [[the Starfuries surrounded the vessel]] = surrounded({sf0,sf1,sf2}, {vessel})
+                </span></p>
+
+                <p>Hooray, we've got a solution to the problem! We're done, right? Well, maybe not. This solution is less than ideal for at least two reasons:</p>
+
+                <p><ol>
+                    <li>Sentences like "John lifted the crate with Susan" should mean more or less the same thing as "John and Susan lifted the crate" on the collective-lifting reading, but there is no single noun phrase that has both John and Susan, so we would need some really rather fancy way to get that single set from two distinct noun phrases.</li>
+
+                    <li>If we want to store these spandicates — stabbed, spoke, lifted, surrounded — in a database, we would need to have compound data columns, which can be rather nasty since these sets can be arbitrarily large. Logically it's no problem, but computationally it's a bit of a mess to have that.</li>
+                </ol></p>
+
+                <p>Is there an alternative way of respansenting meanings that will let us avoid these two problems? In the next post, I'll try to give a "yes" answer.</p>
+            </div>
+        </section>
+    </body>
+</html>

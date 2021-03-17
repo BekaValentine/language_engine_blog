@@ -1,0 +1,162 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Generic Evaluation</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Generic Evaluation</h1>
+            <div class="content">
+                <p><em>posted by Beka on 29 September 2015</em></p>
+                
+                <p>This post is somewhat tangential to what I've been doing with Language Engine, but since it's about programming language design, and since I'm designing a language for LE, I guess it's kind of related.</p>
+                
+                <p>The topic of todays post is an answer to a question I posed on Twitter a few days ago about whether or not it would be possible to define evaluation in a way that was "style generic". That is to say, whether you use the standard lazy or eager evaluation functions that just recurse using the host language's mechanism, or a stack machine that builds up evaluation contexts, or whatever, the evaluated term you produce at the end is the same — the only difference is the style of the evaluator, not the meaning of evaluation. So is there a way to define <em>the</em> lazy evaluator, or <em>the</em> eager evaluator, or <em>the</em> lazy stack machine, and so on, and then choose one or the other as you want, for use in your language, independent of the language itself? The answer, I think, is yes, and so I'll present here my solution.</p>
+                
+                <h3>What is evaluation, anyway?</h3>
+                
+                <p>A typical presentation of eager evaluation for the simply typed λ calculus with pairs and functions goes something like this:</p>
+                
+                <pre><code>data Term = Pair Term Term | Fst Term | Snd Term
+          | Lam (Term -> Term) | App Term Term
+
+eval :: Term -> Term
+eval (Pair x y)
+  = Pair (eval x) (eval y)
+eval (Fst p)
+  = case eval p of
+      Pair x y -> x
+      p'       -> Fst p'
+eval (Snd p)
+  = case eval p of
+      Pair x y -> y
+      p'       -> Snd p'
+eval (Lam b)
+  = Lam b
+eval (App f x)
+  = case eval f of
+      Lam b -> eval (b (eval x))
+      f'    -> App f' (eval x)</code></pre>
+                
+                <p>If we look at this, we can observe that there are two things going on. The first is the recursive evaluations, and the second, which shows up only in the cases for <code>Fst</code>, <code>Snd</code>, and <code>App</code>, is the actual process of β reduction.</p>
+                
+                <p>If we think about how the type theory is set up, our β rules are in fact defined completely in isolation of recursive evaluation. For pairs and functions, it goes something like</p>
+                
+                <pre><code>fst &lt;M,N&gt;  ⇝  M
+snd &lt;M,N&gt;  ⇝  N
+(λx.M) N  ⇝  [N/x]M</code></pre>
+                
+                <p>These reductions are used to define a relation of normalization or evaluation, often written <code>M ⇓ M'</code>, that relates arbitrary terms to the an equivalent term that is not β-reducible at its outmost<footnote>This at least gives us weak head normal form. To require strong head normal form, we'd want to say no β-reducible subterms anywhere, and this is somewhat related to eagerness, but not entirely</footnote>, and this is what gives rise, in non-relation terms, to the evaluation function. Various versions of the evaluation relation exist, for the lazy and eager evaluations, and there are alternatives to those as well. The <code>⇓</code> versions are called "big step semantics" and there are variants called "small step semantics" which basically just means stack machine evaluation. And there are still other more exotic forms of evaluation as well. But the β reductions never change. They get coded in different ways into these systems, but but the reductions are the ultimate key to what it means to evaluate. Regardless of <em>style</em>, a function is an evaluation function just in case it reduces the relevant reducible (sub)terms.</p>
+                
+                <p>To do this requires finding relevant redexes — subterms which β can apply to — and applying β, but it also means finding <em>possible</em> redexes — subterms which might become redexes after some reduction takes place. For example, the outermost term in <code>fst (fst &lt;&lt;1,2&gt;,3&gt;)</code> is not a redex, but if we reduce <code>fst &lt;&lt;1,2&gt;,3&gt;</code> to <code>&lt;1,2&gt;</code>, to produce <code>fst &lt;1,2&gt;</code>, we now have a redex. Notice here, that this means that to do any normalization, we have to find these possible redexes and do at least <em>some particular</em> recursive evaluation.</p>
+                
+                <p>Is there anything that tells you where this particular recursive evaluation occurs? Why yes! If we look at these things through the typed lens, we see that the terms that have to be recursively evaluated are precisely those terms which are the targets of elimination rules. Look at the elim rules for pairs and functions:</p>
+                
+                <pre><code>Γ ⊢ P : A * B
+------------- *-Elim-1
+Γ ⊢ fst P : A
+
+Γ ⊢ P : A * B
+------------- *-Elim-2
+Γ ⊢ snd P : B
+
+Γ ⊢ M : A -> B    Γ ⊢ N : A
+--------------------------- ->-Elim
+        Γ ⊢ M N : B</code></pre>
+                
+                <p>For pairs, it's <em>pair</em> elimination precisely because the premise has a pair type operator that we target and get rid of in the conclusion. For functions, it's <em>function</em> elimination precisely because one of the premises has a function type operator that we target and get rid of in the conclusion. Let's call these targeted subterms — <code>P : A * B</code> and <code>M : A -> B</code> — the Main subterms of the elims, and everything else (in this case just <code>N : A</code> from function elim) will be Auxiliary subterms. We'll also call the subterms of intros (so pair elements) auxiliary as well, since they're not the targets of reductions, except all scopal subterms (e.g. bodies of λs or branches of case expressions will be treated as distinct, simply because evaluation under binders is something we might not want to do).</p>
+                
+                <p>So then we can say this about evaluation: the main subterms are definitely evaluated, because we need to turn them into intros in order to β reduce. Every evaluator has this in common, whether its lazy or eager, stack based or not. What on is how they traverse the program tree, what they do with auxiliary terms, and so on. Lazy evaluators don't also evaluate aux terms, but eager ones do. Stack evaluators traverse the tree by building a doubly-typed zipper of some form, while the <code>eval</code> style evaluator above does it by stealing traversal from the host language.</p>
+                
+                <p>This provides us with a basis of the idea for generic evaluation: separate out the <em>reduction</em> task from the <em>recursive</em> tasks and let each evaluator define how to compose them.</p>
+                
+                <h3>A simplified version for the simply typed LC</h3>
+                
+                <p>Before going fully generic, it might help to see how this works for the very simple case of the STLC shown above. We'll start by considering the representation for terms. An <code>Intro s b a</code> is an intro form (<code>Pair</code>, <code>Lam</code>), with parameters <code>s</code> for the type of scope arguments, <code>b</code> for scope bodies, and <code>a</code> for auxiliary terms. As noted, pairs have aux terms, but scopes are treated separately.</p>
+                
+                <pre><code>data Intro s b a
+  = Pair a a
+  | Lam (s -> b)</code></pre>
+                
+                <p><code>Elim m a</code> is similarly the type of elim forms (<code>Fst</code>, <code>Snd</code>, and <code>App</code>), parameterized by the type <code>m</code> of main terms, and <code>a</code> again for aux terms.</p>
+                
+                <pre><code>data Elim m a
+  = Fst m
+  | Snd m
+  | App m a</code></pre>
+                
+                <p>A <code>Term</code> is just either an <code>Intro</code> where all subterms can be <code>Term</code>s, or it's an <code>Elim</code> where all subterms can be terms.</p>
+                
+                <pre><code>data Term
+  = I (Intro Term Term Term)
+  | E (Elim Term Term Term Term)</code></pre>
+                
+                <p>We also ought to be able to map over both auxiliary and main positions.</p>
+                
+                <pre><code>class Aux f where
+  mapAux :: (a -> a') -> f a -> f a'
+
+instance Aux (Intro s b) where
+  mapAux f (Pair x y) = Pair (f x) (f y)
+  mapAux _ (Lam g)    = Lam g
+
+instance Aux (Elim m) where
+  mapAux _ (Fst p)   = Fst p
+  mapAux _ (Snd p)   = Snd p
+  mapAux f (App g x) = App g (f x)
+
+mapMain :: (m -> m') -> Elim m a -> Elim m' a
+mapMain f (Fst p)   = Fst (f p)
+mapMain f (Snd p)   = Snd (f p)
+mapMain f (App g x) = App (f g) x</code></pre>
+                
+                <p>We could also map over scope body positions, but since this version won't do evaluation under binders, we can omit it. It should be obvious how to do that, however.</p>
+                
+                <p>A <code>Redex a</code> is just an <code>Intro</code> in the main position of an <code>Elim</code> and <code>a</code>s everywhere else, as mentioned before.</p>
+                
+                <pre><code>type Redex a = Elim (Intro a a a) a</code></pre>
+                
+                <p>And we can reduce by converting a <code>Redex a</code> into an <code>a</code> in exactly the way we want from β reduction.</p>
+                
+                <pre><code>reduce :: Redex a -> a
+reduce (Fst (Pair x _)) = x
+reduce (Snd (Pair _ y)) = y
+reduce (App (Lam f) x)  = f x</code></pre>
+                
+                <p>The polymorphism of this function serves to help ensure that the reduction really is a reduction. We can only extract an <code>a</code> by combining the pre-existing <code>a</code>s and scopes. This is exactly the notion of β reduction that type theory demands: transforming a complex term into a simpler one that does the same thing, and which must have already in some sense existed inside the complex term, but for arrangement.</p>
+                
+                <p>If we now want to define lazy evaluation, it's relatively straight forward. We can turn an arbitrary <code>Term</code> into a constructor-headed <code>Intro Term Term Term</code>. If the term is already constructor-headed, then we're done. If it's not, we recursively evaluate the main term to produce a redex, reduce that, and continue evaluating. No evaluation of auxiliary terms happens at all.</p>
+                
+                <pre><code>lazyEval :: Term -> Intro Term Term Term
+lazyEval (I i) = i
+lazyEval (E e) = lazyEval (reduce (mapMain lazyEval e))</code></pre>
+                
+                <p>On the other hand, we can similarly evaluate eagerly. For terms that are already constructor headed, we ought to evaluate their aux terms to make them normalized as well. And for other terms, we recursively evaluate the main subterm, then the aux terms, to produce a redex, then we continue evaluating that.</p>
+                
+                <pre><code>eagerEval :: Term -> Intro Term Term Term
+eagerEval (I i) = mapAux (I . eagerEval) i
+eagerEval (E e) = eagerEval (reduce (mapAux (I . eagerEval)
+                                            (mapMain eagerEval e)))</code></pre>
+                
+                <p>Observe, however, that these two definitions make no mention at all of what the forms are that we have. Neither actually knows about pairs or functions, all of that is kept in <code>reduce</code> and the map functions. We can happily add new forms to <code>Intro</code> and <code>Elim</code>, such as sum types, and we only have to modify these functions. We never need to change the definition of <code>lazyEval</code> and <code>eagerEval</code>.</p>
+                
+                <p>As a consequence, these two evaluators are generic over the choice of <code>Intro</code> and <code>Elim</code>, and we can abstract over these type constructors and their associated functions, and so I've done just that <a href="...">here</a>. This version abstracts a bit farther, treating forms as just names, with the general shape of intros and elims reified into their own data types. It also has another type called a special form, which corresponds to forms other than intros or elims, such as let's and fixed point combinators. Both elims and special forms can compute, however, so they're joined together as reducibles. There are also four evaluators (the two shown here, plus lazy and eager stack machines), and the simply typed λ calculus, which you can note is quite short (the ignoring pattern synonyms, it's 10 lines of code!).</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).</p>
+                
+            </div>
+        </section>
+    </body>
+</html>

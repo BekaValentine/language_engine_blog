@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - Simpler Symbolic Machine Learning</title>
+        
+        <script src="/resources/prooftree/svg.js"></script>
+        <script src="/resources/prooftree/prooftree.js"></script>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>Simpler Symbolic Machine Learning</h1>
+            <div class="content">
+                <p><em>posted by Beka on 5 Mar 2016</em></p>
+                
+                <p>In <a href="languagengine.co/blog/symbolic-machine-learning">a previous blog post</a>, I proposed a technique for representing symbolic data as numerical vectors which could be used for machine learning purposes. There was one major drawback to the approach, however: because the indices of the vectors were the different graphs up to some bounding size, the number of indices could be extraordinarily large. For an undirected, unlabeled graph with 5 nodes, there's 2<sup>15</sup> = 32,768 distinct graphs. Adding in labels increases this substantially, and even with the imposition of directed acyclic structure, the numbers are still quite large. This blog post aims to address this problem and provide and alternative way to think about symbolic vectors.</p>
+                
+                <h3>Eliminating Indices</h3>
+                
+                <p>The main reason for the large number of possible index graphs is that we're by default counting <em>every</em> possible subgraph up to the maximum size. A large number of of these may be completely nonsense, or incredibly uncommon, or just uninformative. For instance, given a particular constructor, we know how many arguments it has, so any graph that omits these is omitting information that is already guaranteed by the constructor itself. Therefore, we gain no new ways of seeing the graph, just new ways of representing that same knowledge, via certain omissions. In particular, if the constructor has N arguments, then there are 2<sup>N</sup> possible graphs we could have that represent the constructor node, which have no distinct information content. So we have an exponential redundancy here. We can avoid this by ensuring that whenever we know what a node's constructor/label is, we also include all of the arguments that it has.</p>
+                
+                <p>Another way to avoid counting all of the subgraphs is to find some way to count up only (or at least almost-only) the subgraphs that are common. Of course, it's hard to determine what's common without counting all the things, so it's almost a self-defeating proposal. However, we might just have a way to get around this. Consider for a moment a slightly different problem: counting n-grams in a string corpus. At some point, it really helps to invent the concept of a phrase, where you treat a string of words as just some single word for the same of counting, because it reduces the number of things you need to track.</p>
+                
+                !!!! image string models + graph models
+                !!!! abcd =={e = ab, f = cd}==>  ef
+                
+                
+                <p>Well we can do the same thing with graphs, thanks to the fact that any complex directed acyclic graph with arbitrarily long paths can be seen as the composition of a number of smaller, simpler graphs with paths of length one, stitched together along shared nodes. In analogy to unigram and bigram, let's call these small graphs unigraphs, and the composition of two of them bigraphs.</p>
+                
+                !!!! similar for graphs
+                
+                <p>This approach is effectively the use of a kind of graph grammar. Just as we can invent grammars for bigram models that collapse bigrams into unigrams for newly invented phrase symbols, we can do the same for collapsing bigraphs into unigraphs. By inventing these new symbols and rules only when the compose graphs are common, we avoid having to track every possible subgraph. Instead we only have to track the small compositions of two established unigraphs.</p>
+                
+                <p>It's important to realize here that this process would involve inventing both new node labels that correspond to the graph that underlies the structure, and also inventing new nodes that weren't already in the graph. So, for instance, if we frequently see the bigraph</p>
+                
+                !!!! image w/ foo and bar
+                
+                <p>we would invent a new node label, lets call it <span class="code">Baz</span>, which we use in a new unigraph like so:</p>
+                
+                !!!! image
+                
+                <p>Any time we see that bigraph in an actual graph, we'll add the <span class="code">Baz</span> unigraph to it, to enrich the representation appropriately:</p>
+                
+                !!!! adding a unigraph
+                
+                <p>Then, to convert this a symbolic vector, we just count up the unigraphs, which is relatively trivial compared to counting up all of the subgraphs that are isomorphic to the indices of the vector.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).</p>
+            </div>
+        </section>
+    </body>
+    
+    
+    <script>
+        const proofEls = document.getElementsByClassName("proof");
+        const proofs = [];
+        for (var i = 0; i < proofEls.length; i++) {
+            proofs.push(proofEls[i]);
+        }
+        
+        for (var i = 0; i < proofs.length; i++) {
+            let p = document.createElement("p");
+            let proof = proofs[i];
+            let drawing = SVG(p);//.size(500,200);
+            proof.parentNode.replaceChild(p,proof);
+            
+            renderProofTree(linesToTree(proof.innerHTML), drawing);
+            
+            p.style.height = drawing.bbox().height + "px";
+        }
+    </script>
+</html>

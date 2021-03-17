@@ -1,0 +1,120 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - NLP Parsing Considered Harmful</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>NLP Parsing Considered Harmful</h1>
+            <div class="content">
+                <p><em>posted by Beka on 19 May 2016</em></p>
+                
+                <p>The title of this post is a bit inflammatory, I grant you, but hopefully in context it'll make sense. In this blog post, I'm going to discuss one of the main characteristics of current NLP parsers, namely their heavy reliance on statistical models, and the reasons behind that choice. I'll also discuss what limitations arise because of this (in particular, for the purposes of natural language understanding and AI), and what we might want to explore as an alternative to the standard NLP approach. This post shouldn't be seen as an attempt to be authoritative on the topic, but just to provide a perspective originating from my Language Engine project.</p>
+                
+                
+                
+                
+                
+                <h3>The Centrality of Statistics</h3>
+                
+                <p>While it can hardly be denied that statistics is incredibly useful, in NLP, statistics has taken on a central role to the point where huge chunks of research are about finding new and clever ways to get more use out of statistical models. Whether it's simple models like n-grams and other Markovian systems, or more complex ones like PCFGs, statistics and huge quantities of training data are right at the heart of syntactic analysis in NLP.</p>
+                
+                <p>The reason for this, I would argue, is that for the vast majority of relevant NLP tasks, the tools are more than sufficient. The performance of these systems is proportional to the amount of data they have to work with, and the necessary data is abundant, so it makes sense to spend time and money on getting the most out of more and more data. Statistical models are easy to build and easy to deploy, and if all you're doing is spam filtering or sentiment analysis, why bother getting fancy?</p>
+                
+                <p>Besides, historically, we've seen what happens when you try to use hand-crafted grammars. They're incredibly brittle, and don't work anywhere nearly as well as their statistically extracted counterparts. As Jelinek is as saying, "Every time I fire a linguist, the performance of the speech recognizer goes up".</p>
+                
+                <p>The mantra of NLP since the late 80s and early 90s has been, basically, "Forget linguistics, give me more data!". And hey, if it works, why not?</p>
+                
+                
+                
+                
+                
+                <h3>Does it <em>really</em> work?</h3>
+                
+                <p>Of course, whether or not something works depends entirely on what you're trying to achieve. Regular expressions work brilliantly for very many tasks, but it's something of a running joke in the programming world that only a fool or a newbie would try to parse HTML with regular expressions. It would be silly to say that regular expressions work, or don't work, without qualifying what it is you're trying to do with them. The adequacy of a tool isn't determined solely by the tool in isolation.</p>
+                
+                <p>So before we can make pronouncements like "Naive statistical techniques work better", we have to have some idea of what it is that they're being used for. In this blog post, the use of interest is parsing. In particular, the job is to produce parse trees that are in some sense "plausible". That is to say, they're more or less scientifically correct, and usable for extracting meanings of the sort that we semanticists are concerned with (i.e. formulas in a symbolic logic).</p>
+                
+                <p>With that task in mind, let's consider the performance of one of the best statistical parsers out there currently: the Stanford Parser, which you can play around with <a href="http://nlp.stanford.edu:8080/parser/index.jsp">here</a>. If we put in some sentences, such as the example sentence "my dog also likes eating sausage" that it shows initially, we find that we get some pretty reasonable parses. We could perhaps quibble over the particulars of the labelling, etc. but those are minor issues. The parses are pretty darn good, and we could definitely use them for translating into a symbolic logic as we'd like.</p>
+                
+                <p>If we did a little deeper, however, we'll notice some silly things happening. For instance, the string "flibble flibble flibble" is happily parsed as a sentence with a verb (flibble) and an object noun (flibble) modified by an adjective (flibble). Which is, well, weird, really. "flibble" isn't even a word of English, let alone a verb, adjective, or noun, so why should it parse? Of course, if you're worried that "flibble" might secretly be a rare but real word of English, or might be too similar to real words that it's passing the lexer, try parsing some keyboard mash nonsense, such as "asdf kjlsadfg ljsad". It still works. Absurd!</p>
+                
+                <p>This behavior isn't a failure or an oddity, it's actually a consequence of the desired behavior of NLP parsers. Real world data is often imperfect, and training corpuses are never 100% representative samples of a language, so your parser has to be designed to fail gracefully. Otherwise, one misspelled word, or one unfamiliar but perfectly real grammatical construction, can throw your entire parse out of whack. It wouldn't be very useful if your parser simply said "no parse" just because of one word. This is the kind of brittleness that plagued hand crafted parsers in the earlier period.</p>
+                
+                <p>To find a way around this problem, most NLP parsers have modifications to their grammars beyond just the usual syntax rules. For example, consider the word "dog". Just from a training corpus, this might be given lexical rules like so (in BNF):</p>
+                
+                <pre><code>&lt;noun&gt; ::= "dog"
+&lt;transitive-verb&gt; ::= "dog"</code></pre>
+                
+                <p>This would account for the noun form as in in "the dog barked" and also the transitive verb form as in this example from Wiktionary: "the woman cursed him so that trouble would dog his every step". And these would have some probabilities associative with them, extracted from the corpus's statistics. But an NLP parser would also include other rules as</p>
+                
+                <pre><code>&lt;adverb&gt; ::= "dog"</code></pre>
+                
+                <p>Even tho "dog" isn't an adverb, it's still useful to have some rules in the system, because it might be the only way to get a sentence to parse. It would be given a very very very tiny probability, so that it's never really used except when it's absolutely necessary, but it's still there. The same would be true of other kinds of rules as well. Effectively, any string of symbols can be any kind of word (noun, verb, adverb, preposition, whatever), but most of the time it has vanishingly small probabilities, except when it actually appears in the training data as that word type.</p>
+                
+                <p>This has the consequence that any string of words, real words or fake junk, will happily parse. We saw this earlier with the two nonsense examples. For NLP purposes, that's generally fine. Most weird parses will simply be minor ungrammaticalities and typos and so forth. The majority of the parse tree will be correct, or at least useful. For example, sentiment analysis improves when you use parse trees, even if part of the tree is garbage. The sentence "that asshole John flibble flobble" doesn't parse to anything sensible in the Stanford Parser, but you can probably still make use of the parts that do parse to guess that it's sentiment is negative. Some valid information is better than none, even at the cost of also having invalid information.</p>
+                
+                <p>So then, we could conclude that, for the purposes of NLP, at least, this works. But is this also true for the purposes of, say, robotic control? Well, not really. A language pipeline for robotic control isn't going to simply calculate some number from a parse tree, and then threshold it to decide if its this sentiment or that. It's going to have to convert parses into meanings into commands for the robot to carry out. That means that any funny parse is just going to push the error downstream. An unknown word becomes an unknown meaning, which becomes an unknown command for the robot, which becomes the robot just not doing anything. Or worse, it does the wrong thing. The same is true of grammatical structures.</p>
+                
+                <p>So we see that in <em>some</em> application domains, deferring the error to something downstream produces bad or no output, which is effectively no different than just failing earlier in the pipeline at the parse stage. A successful parse that yields instructions the robot can't use is the same as no parse at all. Whether to fail early or fail late, it's still a failure. So NLP-style parsing doesn't work in some cases.</p>
+                
+                
+                
+                
+                
+                <h3>A brief aside on training corpuses</h3>
+                
+                <p>Before moving on, I briefly also want to comment on the training corpuses that most NLP parsers rely on. These corpuses are deceptive in at least two ways. The first is that they actually rely heavily on trained linguists to produce them. The Penn Treebank, for instance, was a multi-year effort involving many linguists — honest to goodness linguists, not mere people who were vaguely trained to construct parse trees. So in some sense, it's actually a big lie to say that NLP isn't relying on linguists. Or to put it another way, Jelinek may have fired lots of linguists, but he was more than happy to use their work in the form of the phonetic transcriptions from dictionaries. The ground truths that NLP uses to train against is the result of linguists applying linguistics.</p>
+                    
+                <p>Secondly, even tho linguists put a lot of work into these parsed corpuses, the vast size of many of them is often too much to actually build by hand. Some parsed corpuses are actually <em>machine parsed</em>, often without any human correction. What happens is, some linguists create a seed corpus of professionally parsed sentences, and then use statistical techniques to extract a grammar. They then parse even more sentences with the statistical model, and that becomes the full parsed corpus.</p>
+                
+                <p>Even if we ignore the silly rules like "dog is an adverb" and so on, we can't rely entirely on these corpuses, because any problems with the original seed corpus was replicated into the larger corpus. NLPers know that you don't train your algorithms on their own outputs, because you have no idea whether the outputs are correct. And yet this is effectively what all modern NLP does when it relies on these enormous parsed corpuses. We can only trust modern NLP parsers so far as we can trust the original parsers that built the corpuses that the NLP parsers are trained on — the original parsers back from the mid to late 1990s.</p>
+                
+                
+                
+                
+                
+                <h3>Sources of brittleness</h3>
+                
+                <p>In general, we want to have parsers that are robust to problems, not parsers that are brittle. We want problematic data to produce some kind of useful output in spite of the problems, rather than simply causing the parser to give up. The solution that NLP took was to simply throw probabilities everything and guarantee that every possible input parses, and the bad ones simply parse with very low probabilities (and low confidences, if the system uses confidence measures). But this won't suffice for a task like building Language Engine, for the reasons mentioned above. Instead, we need something better. To find out what alternative there is, we have to first figure out precisely what the source of brittleness is. Or to put it another way, what are the reasons why something might not parse?</p>
+                
+                <p>There are, as far as I can tell, two ways that a parse can fail. One way is that the input itself is malformed. Maybe the user made a typo, or the speech recognition software produced the wrong output, or whatever. The second way is that the grammar used to parse it is incomplete. Maybe the input has words that became popular only after the grammar was produced. For instance, the verb "google", meaning to search for something on Google, only came into existence after Google was created, so any grammar that was constructed before about 1998 would've necessarily omitted this word.</p>
+                
+                <p>These two possibilities aren't actually possible to distinguish just from a single input, however. Just given one non-parsing sentence, how would even potentially tell whether the problem is the grammar or the input itself? We can't. But we can take a cue from humans. When a person hears or reads a sentence that doesn't quite parse, we can invoke a number of strategies to fix the problem. If we're in a conversation with someone, we can ask for clarification. "Can you repeat that?", for instance. Or "what did you mean by 'flibble'?", and maybe they're reply "No, no, I said 'dribble'".</p>
+                
+                <p>If, on the other hand, we're reading a text or listening to audio, and we can't ask the speaker/writer, we can make some educated guesses based on how malformed the input is. For example, if you hear someone say "John told Ivanova to contact spaceship again", your first instinct is probably to insert the word "the" before "spaceship", since that would make it parse. The more malformed the input is, the harder it is for humans to fix the errors. Compare that sentence to "John Ivanova spaceship". Too many words are missing, too much fixing needs to happen. We end up having to do a lot of guesswork, and we don't trust the results very much.</p>
+                
+                <p>If neither of these options works, because, for example, the person we're talking to reiterates the word "flibble", then we can be more confident that the input was exactly what the speaker intended. This would be what happened, for instance, to people around the late 90s when they first encountered the word "google", especially as a verb. After repeatedly hearing this new word, and possibly asking people, they <em>learn</em> that it's a word and what it means. So rather than trying to repair it to a word that they know (e.g. "gurgle" or "goggle" or something), they update their grammar with a new word.</p>
+                
+                <p>So we can see, in response to non-parsing input, humans have two strategies — try to repair the input to make it parse, or learn some new grammar rules (such as word rules) to make it parse. The role of probabilities and statistics in these is secondary, at best. We might use it to guess the most-likely repair, or we might use it to decide that some novel thing has occurred way too many times to be an error. But crucially, we're not simply using probabilities to make everything parse. We accept that things may not parse, and we use that fact.</p>
+                
+                
+                
+                
+                <h3>Error-tolerant Parsing</h3>
+                
+                <p>The proposal that I would make for a new kind of parser is relatively simple: a traditional parser setup that expects well-formed inputs, augmented with additional error handling information. In cases where the input can parse, it should behave like a standard NLP parser, picking the most likely parse in case there are many.</p>
+                
+                <p>But when the input is malformed, the parser should provide as much information as possible. In particular, it should provide information about the various partial parses that are possible on the input string. This makes it idea to use a chart parser or similar non-deterministic bottom-up technique.</p>
+                
+                <p>We can also add some additional mechanisms to try to do error repair, at least to generate candidates. For example, in <a href="languagengine.co/blog/regex-edit-distance/">my post on regex edit distance</a>, I mentioned that the technique can be relatively easily extended to produce diffs instead of just edits. We could use such a system to try to repair the partial parses from the chart parser.</p>
+                
+                <p>These are just some suggestions for one possible route to take. I'm curious if there are others. I'm sure there's a whole variety of options for handling parse failure for future natural language understanding and AI purposes that don't involve throwing everything into the statistics and hoping that parse errors won't be an issue.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine and #haskell).</p>
+            </div>
+        </section>
+    </body>
+</html>

@@ -1,0 +1,386 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8"> 
+        <link href="/stylesheets/global.css" rel="stylesheet" type="text/css" />
+        <title>languagengine - Blog - So you want to write a type checker...</title>
+    </head>
+    <body class="info-page">
+        <section id="header">
+            <a href="/"><span id="title">languag<span class="logo-e">e</span>ngine</span></a>
+            <nav id="navigation">
+                <a href="/">Home</a>
+                <a href="/blog">Blog</a>
+                <a href="/learn-more">Learn More</a>
+                <a href="/about-us">About Us</a>
+            </nav>
+        </section>
+        
+        <section id="blog" class="content-section">
+            <h1>So you want to write<br/>a type checker...</h1>
+            <div class="content">
+                <p><em>posted by Beka on 23 Dec 2014</em></p>
+                
+                <p>So you want to write a type checker, but you don't know how. Well in this post, I'm going to show you how to implement one using JavaScript, for the simply typed lambda calculus with pairs and functions. JS is not the most ideal language for this, unfortunately, because it lacks a good type system of its own, and makes a bunch of stuff really ugly and noisy, but in a way, that's ideal. It'll give you a sense of what you'd have to do in other languages with similarly impoverished type systems. The way I'm going to implement it should be relatively easy to translate into idiomatic code in various.</p>
+                
+                <p>You can see the full code for this type checker <a href="https://github.com/psygnisfive/so-you-want-to-write-a-type-checker">on GitHub</a>. There is also a Haskell version of the same type checker, for comparison. Question info at the bottom of this post as usual.</p>
+                
+                <p>I'm assuming you know a little bit about type theory, such as having looked at the Pfenning videos that I posted in <a href="https://www.purelytheoretical.com/sywtltt.html">this little guide</a>. If not, I highly recommend you brush up, otherwise some of this might be confusing.</p>
+                
+                <p>Our first task is to figure out just what the type theory is that we want to implement. To keep things simple, we'll implement only four types (and add some more later). We'll have pair types and function types, which will be the interesting cases, and we'll also have three types <span class="code">Foo</span>, <span class="code">Bar</span>, and <span class="code">Baz</span>, which won't do anything except give us two base types to work with. We won't be able to do much programming with just these, but we'll still be able to see how a type checker works.</p>
+                
+                <p>Before we really get into defining the type system and implementing it in JS, we should first figure out how we're going to represent structured data in JS. To remain fairly language-generic, what we'll do is use JS objects to structure things according to their functionality within a piece of data. So for instance, just as you might implement a linked list in JS like so:</p>
+                
+                <pre class="code"><code>var nil = { tag: "nil" };
+
+function cons(x,xs) {
+    return { tag: "cons", head: x, tail: xs };
+}</code></pre>
+                
+                <p>we can use this same technique for other kinds of data, such as the representation of types, or the representation of terms.</p>
+                
+                <p>So now let's define the type theory. First we'll define a judgment <span class="code">A type</span> which will serve as an internal way of representing when something is or isn't a well-formed type:</p>
+                
+                <pre><code>A type
+======
+
+-------- Foo Formation      -------- Bar Formation
+Foo type                    Bar type
+
+
+            -------- Baz Formation
+            Baz type
+
+
+A type    B type                  A type    B type
+---------------- * Formation      ---------------- -> Formation
+    A*B type                        A -> B type</code></pre>
+                
+                <p>We can implement this in JS relatively easily. The representation of the types will be like the example link list implementation, while the judgment <span class="code">A type</span> will be a function <span class="code">judgment_type</span>, which returns true if its argument is a type according to these rules, and false otherwise. We'll call the pair type helper function "prod" instead of "pair" just because we want to use "pair" later for the pair constructor.</p>
+                
+                <pre class="code"><code>var Foo = { tag: "Foo" };
+var Bar = { tag: "Bar" };
+var Baz = { tag: "Baz" };
+
+function prod(a,b) {
+    return { tag: "*", left: a, right: b };
+}
+
+function arr(a,b) {
+    return { tag: "->", arg: a, ret: b };
+}
+
+function judgment_type(a) {
+  if ("Foo" == a.tag || "Bar" == a.tag || "Baz" == a.tag) {
+      
+      return true;
+      
+  } else if ("*" == a.tag) {
+      
+      return judgment_type(a.left) &amp;&amp; judgment_type(a.right);
+      
+  } else if ("->" == a.tag) {
+      
+      return judgment_type(a.arg) &amp;&amp; judgment_type(a.ret);
+      
+  } else {
+      
+      return false;
+      
+  }
+}</code></pre>
+
+                <p>A more robust implementation might include checks that all of the right properties exist on the objects (i.e. check <span class="code">tag</span> exists, and for each choice of its value, check that the corresponding properties exist), but for simplicity I leave these checks out. Anything created with the helper values/functions will work with this, but if you construct a tagged value manually, be careful!</p>
+                
+                <p>Next, we should define what it means to be a context of typed variables, using a new judgment <span class="code">G&nbsp;ctx</span>:</p>
+                
+                <pre class="code"><code>G ctx
+=====
+
+------ empty context
+&lt;&gt; ctx
+
+G ctx    A type    x is not in G
+-------------------------------- new var context
+          G, x : A ctx</code></pre>
+                
+                <p>We'll leave it undefined in the proof system what it means to say that a variable is not in a context, but of course it just means that there's no other type declaration for it in the context. We'll still need to implement it tho.</p>
+                
+                <p>We'll use a snoc linked-list design for encoding contexts, but other options are possible:</p>
+                
+                <pre class="code"><code>var empty = { tag: "&lt;&gt;" }
+
+function snoc(g,x,a) {
+    return { tag: ",:", rest: g, name: x, type: a };
+}
+
+function not_in(n, g) {
+    if ("&lt;&gt;" == g.tag) {
+        
+        return true;
+        
+    } else {
+        
+        if (n == g.name) {
+            
+            return false;
+            
+        } else {
+            
+            return not_in(n, g.rest);
+            
+        }
+        
+    }
+}</code></pre>
+                
+                <p>We're not actually going to use the <span class="code">G&nbsp;ctx</span> judgment, tho if we did want to use it (for instance, to verify that we never mess anything up by reusing a variable name) we would implement it like so:</p>
+                
+                <pre class="code"><code>function judgment_ctx(g) {
+    if ("<>" == g.tag) {
+        
+        return true;
+        
+    } else if (",:" == g.tag) {
+        
+        return judgment_ctx(g.rest) &&
+               judgment_type(g.type) &&
+               not_in(g.name, g.rest);
+        
+    } else {
+        
+        return false;
+        
+    }
+}</code></pre>
+                
+                <p>Lastly, we need to define the rules for introducing and eliminating these connectives (i.e. the type checking rules). Since <span class="code">Foo</span> and <span class="code">Bar</span> are just there to give us some base types, we don't need rules for them, as there are no actual values, but for pairs and functions we can use standard definitions, using a hypothetical typing judgment. Let's start with pairs:</p>
+                
+                <pre class="code"><code>G !- M : A
+==========
+
+G !- M : A    G !- N : B
+------------------------ * Intro
+    G !- (M,N) : A*B
+
+G !- P : A*B    G, x : A, y : B !- M : C
+----------------------------------------- * Elim
+G !- split P as (x :: A, y :: B) in M : C</code></pre>
+                
+                <p>This uses the pair splitting definition of pairs (which is basically just a pattern match on pairs) rather than the projection definition (with <span class="code">fst</span> and <span class="code">snd</span>) simply because its easier to type check these. If we used the projection definition, we would need to do type inference as well as checking. The notation for the eliminator uses parentheses and double colons to be mnemonic of what's going on, but we could just as well have written <span class="code">split(P,x,A,y,B,M)</span>.</p>
+                
+                <pre class="code"><code>function pair(m,n) {
+  return { tag: "(,)", first: m, second: n };
+}
+
+function split(p, x, a, y, b, m) {
+    return { tag: "split",
+             pair: p,
+             name_x: x, type_a: a,
+             name_y: y, type_b: b,
+             body: m };
+}
+
+// judgment_check will be modified shortly
+function judgment_check(g, m, a) {
+    
+    if ("(,)" == m.tag &amp;&amp; "*" == a.tag) {
+        
+        return judgment_check(g, m.first, a.left) &amp;&amp;
+               judgment_check(g, m.second, a.right);
+        
+    } else if ("split" == m.tag) {
+        
+        return judgment_check(g, m.pair, prod(m.type_a, m.type_b)) &amp;&amp;
+               judgment_check(snoc(snoc(g, m.name_x, m.type_a),
+                                   m.name_y, m.type_b),
+                              m.body,
+                              a);
+    
+    } else {
+        
+        return false;
+        
+    }
+    
+}
+
+</code></pre>
+
+                <p>And now the rules for function types:</p>
+                
+                <pre class="code"><code>G, x : A !- M : B
+------------------ -> Intro
+G !- \x.M : A -> B
+
+G !- M : A -> B    G !- N : A
+----------------------------- -> Elim
+   G !- app(M, N :: A) : B</code></pre>
+                
+                <p>This eliminator marks the type of the argument, again because its easier to type check that way. If you look at the rules for pair and function elims, you'll notice that without these annotations, some information is present in the premises but not in the conclusion, which would make it impossible to simply type <em>check</em>, and would necessitate inference.</p>
+                
+                <p>Now the implementation (which changes <span class="code">judgment_check</span>):</p>
+                
+                <pre class="code"><code>function lam(x,m) {
+    return { tag: "lam", name: x, body: m };
+}
+
+function app(m,n,a) {
+    return { tag: "app", fun: m, arg: n, type_arg: a };
+}
+
+// the new version
+function judgment_check(g, m, a) {
+    
+    ... else if ("lam" == m.tag &amp;&amp; "->" == a.tag) {
+        
+        return judgment_check(snoc(g, m.name, a.arg), m.body, a.ret);
+        
+    } else if ("app" == m.tag) {
+        
+        return judgment_check(g, m.fun, arr(m.type_arg, a)) &amp;&amp;
+               judgment_check(g, m.arg, m.type_arg);
+        
+    } ...
+    
+}</code></pre>
+                
+                <p>The only thing that we have to do is implement the rule for variables:</p>
+                
+                <pre class="code"><code>x has type A in G
+----------------- variable
+   G !- x : A</code></pre>
+                
+                <p>However, to do this we need to implement a way to check that a variable has a specific type in the context, and therefore we need to have a way of testing equality on types. Using JS's built in equality won't work because we need to traverse structure. It would be nice if it were true that <span class="code">prod(Foo,Bar)&nbsp;==&nbsp;prod(Foo,Bar)</span>, but it simply isn't, because each use of <span class="code">prod</span> creates a new JS object. So we'll define some auxiliary functions first:</p>
+                
+                <pre class="code"><code>function type_equality(a,b) {
+    
+    if (("Foo" == a.tag &amp;&amp; "Foo" == b.tag) ||
+        ("Bar" == a.tag &amp;&amp; "Bar" == b.tag) ||
+        ("Baz" == a.tag &amp;&amp; "Baz" == b.tag)) {
+        
+        return true;
+        
+    } else if ("*" == a.tag &amp;&amp; "*" == b.tag) {
+        
+        return type_equality(a.left, b.left) &amp;&amp;
+               type_equality(a.right, b.right);
+        
+    } else if ("->" == a.tag &amp;&amp; "->" == b.tag) {
+        
+        return type_equality(a.arg, b.arg) &amp;&amp;
+               type_equality(a.ret, b.ret);
+        
+    } else {
+        
+        return false;
+        
+    }
+    
+}
+
+function var_has_type(n,a,g) {
+    if ("&lt;&gt;" == g.tag) {
+        
+        return false;
+        
+    } else if (",:" == g.tag) {
+        
+        if (n == g.name) {
+            
+            return type_equality(a, g.type);
+            
+        } else {
+            
+            return var_has_type(n, a, g.rest);
+            
+        }
+        
+    }
+}</code></pre>
+                
+                <p>And now we can add the variable rule to the checking function:</p>
+                
+                <pre class="code"><code>function v(n) {
+    return { tag: "variable", name: n };
+}
+
+function judgment_check(g, m, a) {
+    
+    ... else if ("variable" == m.tag) {
+        
+        return var_has_type(g, m.name, a);
+        
+    } ...
+    
+}</code></pre>
+
+                <p>And that's it! If we now test it on some standard examples, we get the results we want:</p>
+                
+                <pre class="code"><code>/*
+ *  the identity function for foo
+ *  !- \x. x : Foo -> Foo
+ */
+judgment_check(empty,
+               lam("x",v("x")),
+               arr(Foo,Foo))
+
+/*
+ * the fst function
+ * !- \p. split p as (x :: Foo, y :: Bar) in x : Foo*Bar -> Foo
+ */
+judgment_check(empty,
+               lam("p",split(v("p"),"x",Foo,"y",Bar,v("x"))),
+               arr(prod(Foo,Bar),Foo))
+
+/*
+ * the const function
+ * !- \x. \y. x : Foo -> Bar -> Foo
+ */
+judgment_check(empty,
+               lam("x", lam("y", v("x"))),
+               arr(Foo, arr(Bar, Foo)))
+
+/*
+ * the apply function
+ * !- \f. \x. f x : (Foo -> Bar) -> Foo -> Bar
+ */
+judgment_check(empty,
+               lam("f", lam("x", app(v("f"), v("x"), Foo))),
+               arr(arr(Foo,Bar),arr(Foo,Bar)))
+
+/*
+ * the continuize function or reverse apply function
+ * !- \x. \f. f x : Foo -> (Foo -> Bar) -> Bar
+ */
+judgment_check(empty,
+               lam("x", lam("f", app(v("f"), v("x"), Foo))),
+               arr(Foo, arr(arr(Foo,Bar),Bar)))
+
+/*
+ * currying
+ * !- \f. \x. \y. f (x,y) : (Foo*Bar -> Baz) -> Foo -> Bar -> Baz
+ */
+judgment_check(empty,
+               lam("f", lam("x", lam("y",
+                 app(v("f"), pair(v("x"), v("y")), prod(Foo,Bar))))),
+               arr(arr(prod(Foo,Bar),Baz), arr(Foo, arr(Bar, Baz))))
+
+/*
+ * uncurrying
+ * !- \f. \p. split p as (x :: Foo, y :: Bar) in f x y
+ *  : (Foo -> Bar -> Baz) -> Foo*Bar -> Baz
+ */
+judgment_check(empty,
+               lam("f", lam("p", split(v("p"), "x", Foo, "y", Bar,
+                 app(app(v("f"), v("x"), Foo), v("y"), Bar)))),
+               arr(arr(Foo, arr(Bar, Baz)), arr(prod(Foo,Bar), Baz)))</code></pre>
+                
+                <p>Again, you can see the full code for this type checker <a href="https://github.com/psygnisfive/so-you-want-to-write-a-type-checker">on GitHub</a>, and there is a Haskell version of the same type checker, for comparison.</p>
+                
+                <p>If you have comments or questions, get it touch. I'm <a href="https://www.twitter.com/psygnisfive">@psygnisfive</a> on Twitter, augur on freenode (in #languagengine, ##typetheory, and #haskell). Here's <a href="https://news.ycombinator.com/item?id=8790819">the HN thread</a> if you prefer that mode.<!-- and also <a href="http://www.reddit.com/r/programming/duplicates/2pgq72/implementing_language_engine_pluralities_in/">the Reddit threads</a>.--></p>
+                
+            </div>
+        </section>
+    </body>
+</html>
